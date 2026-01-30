@@ -1,0 +1,205 @@
+# Senior DevOps Engineering Rules for HandBrake2Resilio Deployment
+
+# Ensures clean, reproducible deployments and prevents stale container issues
+
+## 🚨 CRITICAL DEPLOYMENT RULES - ALWAYS FOLLOW
+
+### Rule 1: MANDATORY CLEAN DEPLOYMENT PROCESS
+
+When deploying ANY code changes to 192.168.10.18 (production server):
+
+**STEP 1: STOP AND REMOVE ALL CONTAINERS**
+
+```bash
+ssh akun@192.168.10.18 "docker stop \$(docker ps -aq) 2>/dev/null || true"
+ssh akun@192.168.10.18 "docker rm \$(docker ps -aq) 2>/dev/null || true"
+```
+
+**STEP 2: REMOVE ALL DOCKER IMAGES (Force Clean Rebuild)**
+
+```bash
+ssh akun@192.168.10.18 "docker rmi \$(docker images -q) --force 2>/dev/null || true"
+```
+
+**STEP 3: CLEAN BUILD CACHE AND VOLUMES**
+
+```bash
+ssh akun@192.168.10.18 "docker system prune -af --volumes"
+ssh akun@192.168.10.18 "docker builder prune -af"
+```
+
+**STEP 4: REMOVE ALL BUILD FILES FROM HOME DIRECTORY**
+
+```bash
+ssh akun@192.168.10.18 "cd /home/akun && rm -rf handbrake* *.tar.gz *.zip docker-compose* Dockerfile* requirements* deploy* test* verify* standalone*"
+```
+
+**STEP 5: KILL ANY LINGERING PROCESSES ON TARGET PORTS**
+
+```bash
+ssh akun@192.168.10.18 "fuser -k 8080/tcp 3000/tcp 8081/tcp 2>/dev/null || true"
+ssh akun@192.168.10.18 "pkill -f 'python.*8080' 2>/dev/null || true"
+ssh akun@192.168.10.18 "pkill -f 'handbrake' 2>/dev/null || true"
+```
+
+**STEP 6: ONLY THEN PROCEED WITH DEPLOYMENT**
+
+- Upload new code
+- Build fresh images
+- Deploy containers
+
+### Rule 2: CONTAINER NAMING CONVENTIONS
+
+Always use consistent, predictable container names:
+
+- `handbrake2resilio-api-gateway` for API Gateway
+- `handbrake2resilio-frontend` for React Frontend
+- `handbrake2resilio-handbrake` for HandBrake Service
+
+### Rule 3: DEPLOYMENT VERIFICATION
+
+After every deployment, ALWAYS verify:
+
+```bash
+ssh akun@192.168.10.18 "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+ssh akun@192.168.10.18 "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health"
+ssh akun@192.168.10.18 "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000"
+```
+
+### Rule 4: NO INCREMENTAL UPDATES
+
+❌ NEVER attempt to update running containers
+❌ NEVER rely on Docker cache for production deployments
+❌ NEVER assume containers will pick up new code automatically
+✅ ALWAYS do full clean rebuilds for production
+
+### Rule 5: SOURCE CODE MANAGEMENT ON SERVER
+
+Keep server clean - remove ALL previous build artifacts:
+
+- `handbrake2resilio/` directories
+- `*.tar.gz` files
+- `docker-compose*.yml` files
+- `Dockerfile*` files
+- `requirements*.txt` files
+- Any `deploy_*`, `test_*`, `verify_*` scripts
+
+### Rule 6: DEPLOYMENT SCRIPT TEMPLATE
+
+When creating deployment scripts, use this template:
+
+```bash
+#!/bin/bash
+set -e  # Exit on any error
+
+echo "🧹 STEP 1: Stopping all containers..."
+ssh akun@192.168.10.18 "docker stop \$(docker ps -aq) 2>/dev/null || true"
+
+echo "🗑️ STEP 2: Removing all containers..."
+ssh akun@192.168.10.18 "docker rm \$(docker ps -aq) 2>/dev/null || true"
+
+echo "🔥 STEP 3: Removing all images..."
+ssh akun@192.168.10.18 "docker rmi \$(docker images -q) --force 2>/dev/null || true"
+
+echo "🧽 STEP 4: Cleaning Docker system..."
+ssh akun@192.168.10.18 "docker system prune -af --volumes"
+
+echo "📁 STEP 5: Cleaning home directory..."
+ssh akun@192.168.10.18 "cd /home/akun && rm -rf handbrake* *.tar.gz *.zip docker-compose* Dockerfile* requirements* deploy* test* verify* standalone*"
+
+echo "⚔️ STEP 6: Killing lingering processes..."
+ssh akun@192.168.10.18 "fuser -k 8080/tcp 3000/tcp 8081/tcp 2>/dev/null || true"
+
+echo "📦 STEP 7: Uploading new code..."
+# Upload your code here
+
+echo "🏗️ STEP 8: Building fresh images..."
+# Build commands here
+
+echo "🚀 STEP 9: Starting services..."
+# Start commands here
+
+echo "✅ STEP 10: Verifying deployment..."
+# Verification commands here
+```
+
+### Rule 7: ENVIRONMENT-SPECIFIC CONFIGURATIONS
+
+- Development: Can use incremental updates and Docker cache
+- Production (192.168.10.18): MUST use clean deployment process
+- Always specify exact versions in package.json and requirements.txt
+
+### Rule 8: ROLLBACK STRATEGY
+
+Before deploying:
+
+- Tag current working Docker images with timestamp
+- Keep previous working build artifacts as backup
+- Have rollback commands ready
+
+### Rule 9: LOGGING AND MONITORING
+
+After every deployment:
+
+- Check container logs: `docker logs <container-name>`
+- Monitor resource usage: `docker stats`
+- Verify all health endpoints are responding
+
+### Rule 10: SECURITY CONSIDERATIONS
+
+- Always use `--no-new-privileges` in Docker configs
+- Run containers as non-root when possible
+- Clean up sensitive files (env files, keys) after deployment
+- Use secrets management for production credentials
+
+## 🎯 SUMMARY: The Golden Rule
+
+**"When in doubt, nuke it and rebuild from scratch"**
+
+This approach takes slightly longer but ensures:
+✅ No stale containers
+✅ No cached build issues  
+✅ No port conflicts
+✅ No version mismatches
+✅ Reproducible deployments
+✅ Easier debugging
+
+Remember: In production, reliability > speed. A 5-minute clean rebuild is better than hours debugging deployment issues.
+
+## 🔧 HANDBRAKE2RESILIO SPECIFIC RULES
+
+### Frontend Deployment (React)
+
+When updating the React frontend:
+
+1. Always rebuild the entire Docker image with `--no-cache`
+2. Verify Node.js dependencies are up to date
+3. Check for icon compatibility issues (lucide-react versions)
+4. Test the build locally before deploying to server
+
+### API Gateway Deployment (Python Flask)
+
+When updating the API Gateway:
+
+1. Stop the old container completely before starting new one
+2. Verify Python dependencies in requirements.txt
+3. Check database migrations if any
+4. Ensure WebSocket connections are properly configured
+
+### Container Orchestration
+
+When using docker-compose:
+
+1. Always use `docker-compose down` before `docker-compose up`
+2. Use `--build --force-recreate` flags for clean rebuilds
+3. Verify all services start in correct order with dependency checks
+4. Monitor logs during startup for any errors
+
+### File Transfer Best Practices
+
+When uploading code to server:
+
+1. Create timestamped tarballs: `handbrake-ui-$(date +%Y%m%d-%H%M%S).tar.gz`
+2. Upload to `/tmp` first, then move to target location
+3. Verify file integrity after transfer
+4. Clean up old tarballs to save disk space

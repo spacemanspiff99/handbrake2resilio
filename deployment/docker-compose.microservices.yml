@@ -1,0 +1,144 @@
+version: "3.8"
+
+services:
+  # API Gateway Service
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: handbrake2resilio-api
+    ports:
+      - "8080:8080"
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - FLASK_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - HANDBRAKE_SERVICE_URL=http://handbrake-service:8081
+      - CORS_ORIGINS=http://localhost:3000,http://192.168.10.18:3000
+      - HOST=0.0.0.0
+      - PORT=8080
+    depends_on:
+      - redis
+      - handbrake-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - handbrake2resilio-network
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  # HandBrake Service
+  handbrake-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.handbrake
+    container_name: handbrake2resilio-handbrake
+    ports:
+      - "8081:8081"
+    volumes:
+      - /mnt/tv:/mnt/tv:ro
+      - /mnt/movies:/mnt/movies:ro
+      - /mnt/archive:/mnt/archive
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - HOST=0.0.0.0
+      - PORT=8081
+      - MAX_CONCURRENT_JOBS=8
+      - CPU_LIMIT=80
+      - MEMORY_LIMIT=80
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - handbrake2resilio-network
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "6.0"
+          memory: 6G
+        reservations:
+          cpus: "2.0"
+          memory: 2G
+
+  # Redis for Job Queue and Caching
+  redis:
+    image: redis:7-alpine
+    container_name: handbrake2resilio-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - handbrake2resilio-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+
+  # Frontend UI Service
+  frontend:
+    build:
+      context: ./handbrake2resilio/ui-frontend
+      dockerfile: Dockerfile
+    container_name: handbrake2resilio-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+      - REACT_APP_WS_URL=ws://localhost:8080
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+    networks:
+      - handbrake2resilio-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+
+volumes:
+  redis-data:
+
+networks:
+  handbrake2resilio-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

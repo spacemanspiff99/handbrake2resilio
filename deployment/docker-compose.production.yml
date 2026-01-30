@@ -1,0 +1,64 @@
+version: "3.8"
+
+services:
+  handbrake2resilio:
+    image: handbrake2resilio:latest
+    container_name: handbrake2resilio
+    ports:
+      - "8080:8080" # Backend API
+    volumes:
+      - /mnt/tv:/mnt/tv:ro
+      - /mnt/movies:/mnt/movies:ro
+      - /mnt/archive:/mnt/archive
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - CPU_LIMIT=80
+      - MEMORY_LIMIT=80
+      - MAX_CONCURRENT_JOBS=8
+      - TV_SOURCE=/mnt/tv
+      - MOVIES_SOURCE=/mnt/movies
+      - ARCHIVE_DESTINATION=/mnt/archive
+      - DATABASE_PATH=/app/data/handbrake2resilio.db
+      - CORS_ORIGINS=http://localhost:3000,http://192.168.10.18:3000
+      - HOST=0.0.0.0
+      - PORT=8080
+      - MAX_CONTENT_LENGTH=1000000000
+      - DEFAULT_QUALITY=20
+      - DEFAULT_RESOLUTION=1920x1080
+      - DEFAULT_VIDEO_BITRATE=2000
+      - DEFAULT_AUDIO_BITRATE=128
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_HOURS=24
+      - BCRYPT_ROUNDS=12
+      - SESSION_TIMEOUT_MINUTES=60
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "7.2"
+          memory: 7G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+    networks:
+      - handbrake2resilio-network
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=2g
+
+networks:
+  handbrake2resilio-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

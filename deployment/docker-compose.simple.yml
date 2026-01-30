@@ -1,0 +1,115 @@
+version: "3.8"
+
+services:
+  # API Gateway Service (with SQLite)
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: handbrake2resilio_api-gateway
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-}
+      - FLASK_ENV=production
+      - DATABASE_PATH=/app/data/handbrake2resilio.db
+      - CORS_ORIGINS=http://localhost:3000,http://192.168.10.18:3000
+      - HOST=0.0.0.0
+      - PORT=8080
+      - HANDBRAKE_SERVICE_URL=http://handbrake-service:8081
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - handbrake2resilio-network
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  # HandBrake Service
+  handbrake-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.handbrake
+    container_name: handbrake2resilio-handbrake
+    ports:
+      - "8081:8081"
+    volumes:
+      - /mnt/tv:/mnt/tv:ro
+      - /mnt/movies:/mnt/movies:ro
+      - /mnt/archive:/mnt/archive
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - DATABASE_PATH=/app/data/handbrake2resilio.db
+      - HOST=0.0.0.0
+      - PORT=8081
+      - MAX_CONCURRENT_JOBS=8
+      - CPU_LIMIT=80
+      - MEMORY_LIMIT=80
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - handbrake2resilio-network
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "6.0"
+          memory: 6G
+        reservations:
+          cpus: "2.0"
+          memory: 2G
+
+  # Frontend UI Service
+  frontend:
+    build:
+      context: ./handbrake2resilio/ui-frontend
+      dockerfile: Dockerfile
+    container_name: handbrake2resilio-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=http://192.168.10.18:8080
+      - REACT_APP_WS_URL=ws://192.168.10.18:8080
+      - REACT_APP_SOCKET_PATH=/socket.io/
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+    networks:
+      - handbrake2resilio-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+
+networks:
+  handbrake2resilio-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

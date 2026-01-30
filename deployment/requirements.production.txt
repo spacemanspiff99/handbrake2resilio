@@ -1,0 +1,36 @@
+# Core Flask dependencies
+Flask==3.1.1
+Flask-CORS==4.0.0
+Flask-SocketIO==5.3.6
+
+# Security and authentication
+PyJWT==2.8.0
+bcrypt==4.1.2
+
+# Database
+SQLAlchemy==2.0.23
+
+# Monitoring and logging
+psutil==5.9.6
+structlog==23.2.0
+
+# Video processing
+ffmpeg-python==0.2.0
+
+# HTTP and networking
+requests==2.31.0
+urllib3==2.0.7
+
+# Development and testing
+pytest==7.4.3
+pytest-cov==4.1.0
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.1
+
+# Production server
+gunicorn==21.2.0
+
+# Additional utilities
+python-dotenv==1.0.0
+click==8.1.7 

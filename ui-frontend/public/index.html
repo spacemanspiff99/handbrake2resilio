@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="HandBrake2Resilio UI - Web interface for video conversion management"
+    />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    <title>HandBrake2Resilio UI</title>
+    
+    <!-- Global Error Logging Script -->
+    <script>
+      // Server logging function
+      async function logToServer(type, data) {
+        try {
+          const endpoint = type === 'error' ? '/api/log-error' : '/api/log-info';
+          await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...data,
+              userAgent: navigator.userAgent,
+              url: window.location.href,
+              timestamp: new Date().toISOString()
+            })
+          });
+        } catch (e) {
+          console.error('Failed to log to server:', e);
+        }
+      }
+
+      // Create error logging element
+      const errorLog = document.createElement('div');
+      errorLog.id = 'error-log';
+      errorLog.style.cssText = `
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        width: 400px;
+        max-height: 300px;
+        background: #000;
+        color: #ff0000;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 10px;
+        border: 2px solid #ff0000;
+        z-index: 9999;
+        overflow-y: auto;
+        display: none;
+      `;
+      document.body.appendChild(errorLog);
+
+      // Global error handler
+      window.addEventListener('error', function(event) {
+        const errorMsg = `🚨 JavaScript Error: ${event.message}\nFile: ${event.filename}\nLine: ${event.lineno}\nColumn: ${event.colno}\nTime: ${new Date().toISOString()}\n\n`;
+        console.error(errorMsg);
+        errorLog.style.display = 'block';
+        errorLog.innerHTML += errorMsg;
+        errorLog.scrollTop = errorLog.scrollHeight;
+        
+        // Log to server
+        logToServer('error', {
+          error: event.message,
+          stack: event.error ? event.error.stack : 'No stack trace',
+          filename: event.filename,
+          lineno: event.lineno,
+          colno: event.colno,
+          type: 'javascript_error'
+        });
+      });
+
+      // Unhandled promise rejection handler
+      window.addEventListener('unhandledrejection', function(event) {
+        const errorMsg = `🚨 Unhandled Promise Rejection: ${event.reason}\nTime: ${new Date().toISOString()}\n\n`;
+        console.error(errorMsg);
+        errorLog.style.display = 'block';
+        errorLog.innerHTML += errorMsg;
+        errorLog.scrollTop = errorLog.scrollHeight;
+        
+        // Log to server
+        logToServer('error', {
+          error: event.reason.toString(),
+          stack: event.reason.stack || 'No stack trace',
+          type: 'unhandled_promise_rejection'
+        });
+      });
+
+      // Override console methods to capture all logs
+      const originalConsoleLog = console.log;
+      const originalConsoleError = console.error;
+      const originalConsoleWarn = console.warn;
+
+      console.log = function(...args) {
+        const logMsg = `✅ LOG: ${args.join(' ')}\nTime: ${new Date().toISOString()}\n\n`;
+        originalConsoleLog.apply(console, args);
+        errorLog.style.display = 'block';
+        errorLog.innerHTML += logMsg;
+        errorLog.scrollTop = errorLog.scrollHeight;
+        
+        // Log to server
+        logToServer('info', {
+          message: args.join(' '),
+          type: 'console_log'
+        });
+      };
+
+      console.error = function(...args) {
+        const errorMsg = `❌ ERROR: ${args.join(' ')}\nTime: ${new Date().toISOString()}\n\n`;
+        originalConsoleError.apply(console, args);
+        errorLog.style.display = 'block';
+        errorLog.innerHTML += errorMsg;
+        errorLog.scrollTop = errorLog.scrollHeight;
+        
+        // Log to server
+        logToServer('error', {
+          error: args.join(' '),
+          type: 'console_error'
+        });
+      };
+
+      console.warn = function(...args) {
+        const warnMsg = `⚠️ WARN: ${args.join(' ')}\nTime: ${new Date().toISOString()}\n\n`;
+        originalConsoleWarn.apply(console, args);
+        errorLog.style.display = 'block';
+        errorLog.innerHTML += warnMsg;
+        errorLog.scrollTop = errorLog.scrollHeight;
+        
+        // Log to server
+        logToServer('info', {
+          message: `WARN: ${args.join(' ')}`,
+          type: 'console_warn'
+        });
+      };
+
+      // Log React mounting attempt
+      console.log('🔧 React app starting...');
+      console.log('🔧 Environment check:', {
+        userAgent: navigator.userAgent,
+        location: window.location.href,
+        protocol: window.location.protocol,
+        host: window.location.host
+      });
+
+      // Add toggle button for error log
+      const toggleBtn = document.createElement('button');
+      toggleBtn.textContent = '🔍 Toggle Error Log';
+      toggleBtn.style.cssText = `
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 10000;
+        padding: 5px 10px;
+        background: #333;
+        color: white;
+        border: none;
+        cursor: pointer;
+      `;
+      toggleBtn.onclick = () => {
+        errorLog.style.display = errorLog.style.display === 'none' ? 'block' : 'none';
+      };
+      document.body.appendChild(toggleBtn);
+    </script>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root">
+      <!-- Loading message that will be replaced by React -->
+      <div style="padding: 20px; text-align: center; font-family: Arial, sans-serif;">
+        <h2>HandBrake2Resilio UI is Loading...</h2>
+        <p>If you see this message for more than 10 seconds, there may be a JavaScript error.</p>
+        <p>Check the error log in the top-right corner for details.</p>
+        <p>Errors are also being logged to the server.</p>
+      </div>
+    </div>
+  </body>
+</html>

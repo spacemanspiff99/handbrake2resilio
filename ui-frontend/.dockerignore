@@ -1,0 +1,60 @@
+# Frontend specific dockerignore
+
+# Dependencies
+node_modules/
+
+# Production build (will be created during build)
+build/
+
+# Development
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# ESLint
+.eslintcache
+
+# Optional npm cache
+.npm
+
+# Yarn
+yarn-error.log
+
+# Testing
+__tests__/
+*.test.js
+*.spec.js
+
+# Storybook
+.storybook/
+storybook-static/
+
+# Temporary
+tmp/
+temp/
