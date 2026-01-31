@@ -246,6 +246,76 @@ def verify_token():
     )
 
 
+@app.route("/api/tabs", methods=["GET"])
+@require_auth
+def get_tabs():
+    """Get all tabs"""
+    # Optionally filter by user if not admin? For now, list all or user's own.
+    # Let's just list all for simplicity or user's own.
+    # request.user is available.
+    tabs = auth_service.get_tabs(request.user['id'])
+    return jsonify({"data": tabs})
+
+
+@app.route("/api/tabs", methods=["POST"])
+@require_auth
+def create_tab():
+    """Create a new tab"""
+    data = request.get_json()
+    name = data.get("name")
+    source_path = data.get("source_path")
+    destination_path = data.get("destination_path") # Matches schema but frontend sends 'destination'
+    
+    # Handle frontend sending 'destination' instead of 'destination_path'
+    if not destination_path and "destination" in data:
+        destination_path = data["destination"]
+
+    if not name or not source_path or not destination_path:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    tab_id = auth_service.create_tab(
+        name=name,
+        source_path=source_path,
+        destination_path=destination_path,
+        source_type=data.get("source_type", "tv"),
+        profile=data.get("profile", "standard"),
+        user_id=request.user['id']
+    )
+
+    if tab_id:
+        return jsonify({"message": "Tab created", "id": tab_id}), 201
+    else:
+        return jsonify({"error": "Failed to create tab"}), 500
+
+
+@app.route("/api/tabs/<int:tab_id>", methods=["PUT"])
+@require_auth
+def update_tab(tab_id):
+    """Update a tab"""
+    data = request.get_json()
+    
+    # Map frontend 'destination' to 'destination_path' if needed
+    if "destination" in data:
+        data["destination_path"] = data.pop("destination")
+
+    success = auth_service.update_tab(tab_id, data)
+    if success:
+        return jsonify({"message": "Tab updated"})
+    else:
+        return jsonify({"error": "Failed to update tab"}), 500
+
+
+@app.route("/api/tabs/<int:tab_id>", methods=["DELETE"])
+@require_auth
+def delete_tab(tab_id):
+    """Delete a tab"""
+    success = auth_service.delete_tab(tab_id)
+    if success:
+        return jsonify({"message": "Tab deleted"})
+    else:
+        return jsonify({"error": "Failed to delete tab"}), 500
+
+
 @app.route("/api/jobs/add", methods=["POST"])
 @require_auth
 def add_job():

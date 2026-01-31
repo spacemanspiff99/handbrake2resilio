@@ -56,6 +56,22 @@ class AuthService:
                 """
                 )
 
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS tabs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        source_path TEXT NOT NULL,
+                        destination_path TEXT NOT NULL,
+                        source_type TEXT DEFAULT 'tv',
+                        profile TEXT DEFAULT 'standard',
+                        user_id INTEGER,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (user_id) REFERENCES users (id)
+                    )
+                """
+                )
+
                 # Create default admin user if no users exist
                 cursor = conn.execute("SELECT COUNT(*) FROM users")
                 if cursor.fetchone()[0] == 0:
@@ -279,6 +295,73 @@ class AuthService:
 
         except Exception as e:
             logger.error(f"Password change failed: {e}")
+            return False
+
+    def create_tab(self, name, source_path, destination_path, source_type, profile, user_id):
+        """Create a new tab"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO tabs (name, source_path, destination_path, source_type, profile, user_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                    (name, source_path, destination_path, source_type, profile, user_id),
+                )
+                conn.commit()
+                return cursor.lastrowid
+        except Exception as e:
+            logger.error(f"Failed to create tab: {e}")
+            return None
+
+    def get_tabs(self, user_id=None):
+        """Get all tabs, optionally filtered by user"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                if user_id:
+                    cursor = conn.execute("SELECT * FROM tabs WHERE user_id = ?", (user_id,))
+                else:
+                    cursor = conn.execute("SELECT * FROM tabs")
+                
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Failed to get tabs: {e}")
+            return []
+
+    def update_tab(self, tab_id, data):
+        """Update a tab"""
+        try:
+            fields = []
+            values = []
+            for key, value in data.items():
+                if key in ['name', 'source_path', 'destination_path', 'source_type', 'profile']:
+                    fields.append(f"{key} = ?")
+                    values.append(value)
+            
+            if not fields:
+                return False
+            
+            values.append(tab_id)
+            query = f"UPDATE tabs SET {', '.join(fields)} WHERE id = ?"
+            
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(query, values)
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Failed to update tab: {e}")
+            return False
+
+    def delete_tab(self, tab_id):
+        """Delete a tab"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("DELETE FROM tabs WHERE id = ?", (tab_id,))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"Failed to delete tab: {e}")
             return False
 
 
