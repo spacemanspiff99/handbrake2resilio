@@ -12,6 +12,7 @@ import redis
 import json
 import subprocess
 from datetime import datetime
+from pathlib import Path
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import structlog
@@ -22,6 +23,9 @@ from job_queue import ConversionJob, JobStatus
 
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)
+
+# Jail root configuration
+JAIL_ROOT = Path(os.getenv("JAIL_ROOT", "/mnt")).resolve()
 
 # Configure structured logging
 structlog.configure(
@@ -171,6 +175,104 @@ def run_handbrake_conversion(job):
         job.status = JobStatus.FAILED
         job.error_message = str(e)
         redis_client.hset(f"job:{job.id}", mapping=job.to_dict())
+
+
+def is_safe_path(path_str):
+    """Check if path is within JAIL_ROOT and safe"""
+    try:
+        # Resolve path to absolute path
+        path = Path(path_str).resolve()
+        # Check if it starts with JAIL_ROOT
+        return str(path).startswith(str(JAIL_ROOT))
+    except Exception:
+        return False
+
+
+@app.route("/browse", methods=["GET"])
+def browse_filesystem():
+    """List files and directories in a path"""
+    path_param = request.args.get("path", str(JAIL_ROOT))
+    
+    if not is_safe_path(path_param):
+        return jsonify({"error": "Access denied", "message": "Path is outside allowed directory"}), 403
+    
+    target_path = Path(path_param)
+    
+    if not target_path.exists():
+        return jsonify({"error": "Not found", "message": "Path does not exist"}), 404
+        
+    if not target_path.is_dir():
+        return jsonify({"error": "Not a directory", "message": "Path is not a directory"}), 400
+    
+    try:
+        items = []
+        # Parent directory (if not at root)
+        if target_path != JAIL_ROOT:
+            items.append({
+                "name": "..",
+                "type": "directory",
+                "path": str(target_path.parent),
+                "is_parent": True
+            })
+            
+        for item in sorted(target_path.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+            # Skip hidden files
+            if item.name.startswith("."):
+                continue
+                
+            items.append({
+                "name": item.name,
+                "type": "directory" if item.is_dir() else "file",
+                "path": str(item),
+                "size": item.stat().st_size if item.is_file() else None,
+                "extension": item.suffix.lower() if item.is_file() else None
+            })
+            
+        return jsonify({
+            "path": str(target_path),
+            "items": items
+        })
+    except Exception as e:
+        logger.error(f"Error browsing path {target_path}: {e}")
+        return jsonify({"error": "Browse failed", "message": str(e)}), 500
+
+
+@app.route("/scan", methods=["GET"])
+def scan_filesystem():
+    """Recursive scan for media files"""
+    path_param = request.args.get("path", str(JAIL_ROOT))
+    
+    if not is_safe_path(path_param):
+        return jsonify({"error": "Access denied", "message": "Path is outside allowed directory"}), 403
+        
+    target_path = Path(path_param)
+    media_extensions = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".m4v", ".flv", ".webm"}
+    
+    try:
+        media_files = []
+        # Limit recursion depth or file count if needed, but for now simple walk
+        for root, _, files in os.walk(target_path):
+            # Check if root is still safe (symlinks could escape)
+            if not is_safe_path(root):
+                continue
+                
+            for file in files:
+                if Path(file).suffix.lower() in media_extensions:
+                    full_path = os.path.join(root, file)
+                    media_files.append({
+                        "name": file,
+                        "path": full_path,
+                        "size": os.path.getsize(full_path)
+                    })
+                    
+        return jsonify({
+            "path": str(target_path),
+            "files": media_files,
+            "count": len(media_files)
+        })
+    except Exception as e:
+        logger.error(f"Error scanning path {target_path}: {e}")
+        return jsonify({"error": "Scan failed", "message": str(e)}), 500
 
 
 @app.route("/health")

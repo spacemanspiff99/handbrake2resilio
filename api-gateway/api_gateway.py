@@ -458,6 +458,62 @@ def cancel_job(job_id):
         )
 
 
+@app.route("/api/filesystem/browse", methods=["GET"])
+@require_auth
+def browse_filesystem():
+    """Browse filesystem on HandBrake service"""
+    try:
+        path = request.args.get("path")
+        query = f"?path={path}" if path else ""
+        
+        # Forward to HandBrake service
+        response_data, status_code = forward_to_handbrake_service(f"/browse{query}")
+
+        if response_data:
+            return jsonify(response_data), status_code
+        else:
+            return (
+                jsonify(
+                    {
+                        "error": "HandBrake service unavailable",
+                        "message": "Service is not responding",
+                    }
+                ),
+                503,
+            )
+    except Exception as e:
+        logger.error(f"Browse filesystem error: {e}")
+        return jsonify({"error": "Browse failed", "message": str(e)}), 500
+
+
+@app.route("/api/filesystem/scan", methods=["GET"])
+@require_auth
+def scan_filesystem():
+    """Scan filesystem for media files"""
+    try:
+        path = request.args.get("path")
+        query = f"?path={path}" if path else ""
+        
+        # Forward to HandBrake service
+        response_data, status_code = forward_to_handbrake_service(f"/scan{query}")
+
+        if response_data:
+            return jsonify(response_data), status_code
+        else:
+            return (
+                jsonify(
+                    {
+                        "error": "HandBrake service unavailable",
+                        "message": "Service is not responding",
+                    }
+                ),
+                503,
+            )
+    except Exception as e:
+        logger.error(f"Scan filesystem error: {e}")
+        return jsonify({"error": "Scan failed", "message": str(e)}), 500
+
+
 @app.route("/api/system/status", methods=["GET"])
 @require_auth
 def get_system_status():
