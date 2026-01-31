@@ -20,7 +20,8 @@ const Sidebar = () => {
   const [showAddTab, setShowAddTab] = useState(false);
   const [newTabData, setNewTabData] = useState({
     name: '',
-    destination: '',
+    source_path: '',
+    destination_path: '',
     source_type: 'tv'
   });
 
@@ -32,7 +33,7 @@ const Sidebar = () => {
     onSuccess: () => {
       queryClient.invalidateQueries('tabs');
       setShowAddTab(false);
-      setNewTabData({ name: '', destination: '', source_type: 'tv' });
+      setNewTabData({ name: '', source_path: '', destination_path: '', source_type: 'tv' });
       toast.success('Tab created successfully');
     },
     onError: (error) => {
@@ -72,7 +73,7 @@ const Sidebar = () => {
 
   const handleCreateTab = (e) => {
     e.preventDefault();
-    if (!newTabData.name || !newTabData.destination) {
+    if (!newTabData.name || !newTabData.source_path || !newTabData.destination_path) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -118,12 +119,24 @@ const Sidebar = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Source Path
+                  </label>
+                  <input
+                    type="text"
+                    value={newTabData.source_path}
+                    onChange={(e) => setNewTabData({ ...newTabData, source_path: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="/mnt/media/tv"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Destination Path
                   </label>
                   <input
                     type="text"
-                    value={newTabData.destination}
-                    onChange={(e) => setNewTabData({ ...newTabData, destination: e.target.value })}
+                    value={newTabData.destination_path}
+                    onChange={(e) => setNewTabData({ ...newTabData, destination_path: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="/mnt/archive/Resilio_sync/tv_syncer"
                   />
@@ -170,7 +183,7 @@ const Sidebar = () => {
         ) : (
           <div className="space-y-2">
             {/* Add null checks and proper array handling */}
-            {Array.isArray(tabs?.data) && tabs.data.map((tab) => (
+            {Array.isArray(tabs?.data?.data) && tabs.data.data.map((tab) => (
               <div key={tab.id} className="border border-gray-200 rounded-lg">
                 <div className="flex items-center justify-between p-3">
                   <div className="flex items-center space-x-2">
@@ -213,11 +226,14 @@ const Sidebar = () => {
                 
                 {expandedTabs.has(tab.id) && (
                   <div className="px-3 pb-3">
+                    <div className="text-xs text-gray-500 mb-1">
+                      <span className="font-semibold">Source:</span> {tab.source_path}
+                    </div>
                     <div className="text-xs text-gray-500 mb-2">
-                      Destination: {tab.destination}
+                      <span className="font-semibold">Destination:</span> {tab.destination_path}
                     </div>
                     <div className="text-xs text-gray-500">
-                      Source: {tab.source_type === 'tv' ? 'TV Shows' : 'Movies'}
+                      Type: {tab.source_type === 'tv' ? 'TV Shows' : 'Movies'}
                     </div>
                     {/* Content tree would go here */}
                     <div className="mt-2 text-xs text-gray-400">
@@ -231,7 +247,7 @@ const Sidebar = () => {
         )}
 
         {/* Show empty state when no tabs */}
-        {(!tabs?.data || tabs.data.length === 0) && !isLoading && (
+        {(!tabs?.data?.data || tabs.data.data.length === 0) && !isLoading && (
           <div className="text-center py-8 text-gray-500">
             <Folder className="h-12 w-12 mx-auto mb-2 text-gray-300" />
             <p>No tabs created yet</p>
