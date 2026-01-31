@@ -39,11 +39,22 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     console.log(`✅ API Response: ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`);
-    console.log('✅ Response data preview:', JSON.stringify(response.data).substring(0, 200) + '...');
+    // console.log('✅ Response data preview:', JSON.stringify(response.data).substring(0, 200) + '...');
     return response;
   },
   (error) => {
     console.error('❌ API Response Error:', error.response?.data || error.message);
+    
+    // Handle 401 Unauthorized
+    if (error.response?.status === 401) {
+      // Prevent infinite loops if we are already on login page
+      if (!window.location.pathname.includes('/login')) {
+        console.warn('🔒 401 Unauthorized - Redirecting to login');
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+    }
+
     console.error('❌ Response error details:', {
       status: error.response?.status,
       statusText: error.response?.statusText,
