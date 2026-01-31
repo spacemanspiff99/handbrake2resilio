@@ -547,6 +547,29 @@ def get_system_status():
         )
 
 
+@app.route("/api/system/load", methods=["GET"])
+@require_auth
+def get_system_load():
+    """Get system load (CPU/Memory)"""
+    try:
+        # Get status from HandBrake service which contains system usage
+        handbrake_status = get_handbrake_service_status()
+        
+        if handbrake_status and "system" in handbrake_status:
+            return jsonify(handbrake_status["system"])
+            
+        return jsonify({
+            "cpu_percent": 0,
+            "memory_percent": 0,
+            "disk_percent": 0,
+            "handbrake_processes": 0
+        })
+
+    except Exception as e:
+        logger.error(f"System load error: {e}")
+        return jsonify({"error": "Failed to get system load"}), 500
+
+
 @app.route("/api/config")
 @require_auth
 def get_config():
