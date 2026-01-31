@@ -232,6 +232,20 @@ def register():
         )
 
 
+@app.route("/api/auth/verify", methods=["GET"])
+@require_auth
+def verify_token():
+    """Verify JWT token validity"""
+    # If we reached here, the @require_auth decorator has already verified the token
+    # and populated request.user
+    return jsonify(
+        {
+            "valid": True,
+            "user": request.user
+        }
+    )
+
+
 @app.route("/api/jobs/add", methods=["POST"])
 @require_auth
 def add_job():

@@ -1,0 +1,116 @@
+---
+description: "Comprehensive project rules covering standards, development, security, and deployment"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+*Manual rules
+-use three personas where appropreate - front end engineer, back end engineer, full stack engineer, engineering manager, project manager and qa engineer.  When creating prompts, select which ones are releveant, then in the prompt, make sure to iterate between the personas in sequence, NOT parallel as to get best expertise.  
+-when editing/modifying a frontend, always use a browser simulation tool such as playright (do research for the best one), never assume the frontend will work
+
+# 🏗️ PROJECT STANDARDS & ORGANIZATION
+
+## File and Folder Organization
+1. **No files in root directory** - everything must be in respective folders
+2. **No duplicate folders** - check existing structure before creating new folders
+3. **Follow pattern:** `rep-engine-service/[service-name]/[function-name]/`. also but things like tests in a subfolder to the function (i.e. [function-name]/unit-tests). Do not create more than 5 unrelated files - i.e. if there are more than 5 deployment scripts, create a folder called 'deployment' and move them all there.
+4. **Before creating folders:**
+   - Search existing workspace for similar folders
+   - Use existing locations - DO NOT create duplicates
+   - Report any duplicate folders found and recommend consolidation
+   - There is one central migrations folder for the project, do not create other database migration folders
+5. **File naming:** Create versions of files (v1, v2, etc... instead of slightly changing files like deploy, deploy_new, deploy_simple, make it deploy001, deploy002, deploy003)
+
+## Code Quality & Principles
+- **DRY and SRP**: Generate code that is DRY and SRP-compliant—no duplicated blocks (>3 lines), each function/class has one clear purpose, shared logic lives in reusable helpers, and all names/styles follow the project’s ESLint/Prettier conventions.
+- **Official Documentation**: ALWAYS consult official documentation for API formatting first before implementing any feature or making assumptions (Google Cloud, Mailgun, PostgreSQL, etc.).
+- **Python Standards**: ALWAYS use type hints, implement proper error handling, write unit tests, use meaningful names, and add docstrings.
+
+## Database Migration Rules
+- **ONLY** store .sql files in the central `migrations/` folder
+- **NEVER** create other database migration folders
+- **ALWAYS** use versioned migration files
+- **ALWAYS** test migrations on development data first
+
+## Terraform Safety Rules
+- **NEVER** run `terraform apply -auto-approve` without first running `terraform plan`
+- **ALWAYS** wait for user approval before running `terraform apply`
+- **NEVER** force unlock Terraform state without investigation
+- **ALWAYS** provide a summary of planned changes before applying
+- **Respect state locks** - wait for operations to complete
+
+## Google Cloud Authentication
+- **ALWAYS** use `gcloud auth login --no-launch-browser` when authentication is required
+- **NEVER** wait for user instruction for standard workspace requirements
+
+# 🎯 CORE DEVELOPMENT PRINCIPLES
+
+## Critical Thinking & Truth Priority
+**PRIORITIZE TRUTH OVER AGREEMENT**
+- Be a critical partner; analyze assumptions.
+- What may not be true? Provide alternate solutions.
+- Test reasoning; prioritize truth over agreement.
+- Correct clearly and explain why if anyone is wrong.
+- Do not claim "ready for production" if it's not.
+
+## API & Testing Requirements
+- **API Contract**: ALWAYS test API endpoints with real data; verify request/response formats.
+- **Health Endpoints**: MUST check database/API connectivity and permissions.
+- **E2E Testing**: NEVER claim a feature works without testing the complete user workflow with real data.
+- **Status Detection**: ALWAYS test with real files in real directories.
+
+## Development Workflow
+- **Environment Variables**: ALWAYS use environment variables; NEVER hardcode secrets, host names, or parameters.
+- **Docker Best Practices**: DO NOT run docker as sudo; use multi-stage builds.
+- **Logs First (Debugging)**: ALWAYS analyze logs (server and client) BEFORE analyzing code for logic issues. If necessary logs do not exist, update the code to implement logging that would catch the issue being debugged. NEVER attempt to fix bugs directly from code evaluation alone without log-based verification of the root cause.
+- **No Incremental Updates**: NEVER attempt to update running containers; ALWAYS do full clean rebuilds.
+
+## Magic Patterns UI Integration
+- **Immutable UI Code**: When importing a UI from Magic Patterns, no UI code should be updated unless it has a bug and with explicit permission. Otherwise, use code as is and configure middleware (hooks, utils, or wrappers) to suit the project requirements.
+
+# 🔒 SECURITY & DATA PROTECTION
+
+## Git Security - Prevent Large Files and Passwords
+- **Maximum file size**: 10MB per file
+- **Maximum repository size**: 100MB total
+- **Secrets**: NEVER commit passwords, API keys, or secrets. Use environment variables.
+- **Check for patterns**: Search for `password`, `api_key`, `secret`, `token`, etc., before committing.
+
+## Container & Network Security
+- **Container**: Use `--no-new-privileges`; run as non-root; use specific image tags.
+- **Network**: Use internal networks; expose only necessary ports; use HTTPS in production.
+- **Data**: Encrypt sensitive data at rest; use secure DB connections; clean up sensitive files after deployment.
+
+# 🚨 DEPLOYMENT & DEVOPS
+
+## Mandatory Disk Space Management
+**BEFORE ANY DEPLOYMENT OR DATA-INTENSIVE OPERATION**:
+1. Check disk space (threshold: 85%).
+2. Clean disk space if necessary (Docker prune, clean package caches, old logs, temp files).
+3. Alert if disk usage > 80%; fail if > 90%.
+
+## Mandatory Clean Deployment Process
+1. **Stop & Remove**: Project-specific containers and images.
+2. **Clean**: Build cache, volumes, and project build files.
+3. **Kill**: Lingering processes on target ports.
+4. **Verify**: After deployment, verify container creation date vs code modification date and check MD5 checksums.
+
+## The Golden Rule
+**"When in doubt, nuke it and rebuild from scratch"**
+This ensures no stale containers, no cached build issues, and reproducible deployments.
+
+# 📝 PROMPT MANAGEMENT & EXECUTION
+
+## Lifecycle & Naming
+1. **Sequence**: All execution 
+prompts MUST follow a sequential naming convention: `PHASE_[N]_[DESCRIPTION].md`.
+2. **Completion**: Once ALL tasks in a prompt are implemented AND verified, the file MUST be renamed with a `done__` prefix (e.g., `done__PHASE_01_INITIAL_SETUP.md`).
+3. **Location**: All execution prompts must reside in `scripts/weather-app/docs/prompts/`.
+4. **Handoff**: Every prompt MUST end with a "STOP" section that explicitly names the next file in the sequence.
+5. **Git Commit & Push**: IMMEDIATELY after completing all tasks in a prompt (and renaming the file to `done__`), you MUST commit all changes and push to the remote repository on the current branch.
+
+## Prompt Content Requirements
+1. **Context**: Every prompt MUST reference the `rules.mdc` file.
+2. **Actionable**: Tasks must be concrete, file-specific, and include code snippets where appropriate.
+3. **Verification**: Every prompt MUST include a "Verification" section with specific commands or checks.
+4. **Git Operations**: Every prompt completion implies a mandatory `git add .`, `git commit -m "[Descriptive message]"`, and `git push origin [current-branch]`.

@@ -55,6 +55,27 @@ api.interceptors.response.use(
   }
 );
 
+// Auth API
+export const authAPI = {
+  login: (username, password) => {
+    console.log('🔧 Calling authAPI.login()');
+    return api.post('/api/auth/login', { username, password });
+  },
+  register: (username, password, email) => {
+    console.log('🔧 Calling authAPI.register()');
+    return api.post('/api/auth/register', { username, password, email });
+  },
+  verifyToken: () => {
+    console.log('🔧 Calling authAPI.verifyToken()');
+    return api.get('/api/auth/verify');
+  },
+  logout: () => {
+    console.log('🔧 Calling authAPI.logout()');
+    // Client-side only operation usually, but good to have the method structure
+    return Promise.resolve();
+  }
+};
+
 // Tabs API
 export const tabsAPI = {
   getTabs: () => {

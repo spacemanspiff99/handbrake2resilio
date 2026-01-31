@@ -1,13 +1,16 @@
 import React from 'react';
 import { Toaster } from 'react-hot-toast';
 import { QueryClient, QueryClientProvider } from 'react-query';
-import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { Route, BrowserRouter as Router, Routes, Navigate } from 'react-router-dom';
 
 import Dashboard from './components/Dashboard';
 import Header from './components/Header';
 import QueueView from './components/QueueView';
 import Sidebar from './components/Sidebar';
 import SystemView from './components/SystemView';
+import Login from './components/Login';
+import Register from './components/Register';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 // Enhanced Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -106,6 +109,36 @@ const queryClient = new QueryClient({
   },
 });
 
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
+  }
+  
+  return children;
+};
+
+const AppLayout = ({ children }) => (
+  <div className="min-h-screen bg-gray-50">
+    <Header />
+    <div className="flex">
+      <Sidebar />
+      <main className="flex-1 p-6">
+        {children}
+      </main>
+    </div>
+  </div>
+);
+
 function App() {
   console.log('🔧 App component rendering...');
   
@@ -120,19 +153,36 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <Router>
-          <div className="min-h-screen bg-gray-50">
-            <Header />
-            <div className="flex">
-              <Sidebar />
-              <main className="flex-1 p-6">
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/queue" element={<QueueView />} />
-                  <Route path="/system" element={<SystemView />} />
-                </Routes>
-              </main>
-            </div>
+        <AuthProvider>
+          <Router>
+            <Routes>
+              {/* Public Routes */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              
+              {/* Protected Routes */}
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Dashboard />
+                  </AppLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/queue" element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <QueueView />
+                  </AppLayout>
+                </ProtectedRoute>
+              } />
+              <Route path="/system" element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <SystemView />
+                  </AppLayout>
+                </ProtectedRoute>
+              } />
+            </Routes>
             <Toaster
               position="top-right"
               toastOptions={{
@@ -143,8 +193,8 @@ function App() {
                 },
               }}
             />
-          </div>
-        </Router>
+          </Router>
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
