@@ -4,16 +4,22 @@ import {
     Database,
     HardDrive,
     Monitor,
-    RefreshCw
+    RefreshCw,
+    Plus,
+    LogOut
 } from 'lucide-react';
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from 'react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { systemAPI } from '../services/api';
+import { systemAPI, queueAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import NewJobModal from './NewJobModal';
 
 const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
+  const [showNewJobModal, setShowNewJobModal] = useState(false);
 
   const { data: systemLoad, isLoading } = useQuery(
     'systemLoad',
@@ -25,11 +31,16 @@ const Header = () => {
 
   const { data: queueStatus } = useQuery(
     'queueStatus',
-    () => systemAPI.getQueueStatus(),
+    queueAPI.getQueueStatus,
     {
       refetchInterval: 3000, // Refresh every 3 seconds
     }
   );
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const getSystemStatusColor = () => {
     if (!systemLoad) return 'text-gray-400';
@@ -135,9 +146,31 @@ const Header = () => {
             >
               <RefreshCw className="h-4 w-4" />
             </button>
+
+            {/* New Job Button */}
+            <button
+              onClick={() => setShowNewJobModal(true)}
+              className="flex items-center px-3 py-1 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              New Job
+            </button>
+
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
+
+      {showNewJobModal && (
+        <NewJobModal onClose={() => setShowNewJobModal(false)} />
+      )}
     </header>
   );
 };

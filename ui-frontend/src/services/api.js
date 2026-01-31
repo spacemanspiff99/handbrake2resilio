@@ -180,4 +180,16 @@ export const contentAPI = {
   },
 };
 
+// Filesystem API
+export const filesystemAPI = {
+  browse: (path) => {
+    console.log('🔧 Calling filesystemAPI.browse() with path:', path);
+    return api.get('/api/filesystem/browse', { params: { path } });
+  },
+  scan: (path) => {
+    console.log('🔧 Calling filesystemAPI.scan() with path:', path);
+    return api.get('/api/filesystem/scan', { params: { path } });
+  }
+};
+
 export default api;

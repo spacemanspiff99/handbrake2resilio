@@ -12,6 +12,7 @@ import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useMutation, useQuery, useQueryClient } from 'react-query';
 import { tabsAPI } from '../services/api';
+import FileBrowser from './common/FileBrowser';
 
 const Sidebar = () => {
   const [expandedTabs, setExpandedTabs] = useState(new Set());
@@ -24,6 +25,9 @@ const Sidebar = () => {
     destination_path: '',
     source_type: 'tv'
   });
+  
+  // File Browser State
+  const [activeBrowserField, setActiveBrowserField] = useState(null); // 'source' or 'destination' or null
 
   const queryClient = useQueryClient();
 
@@ -121,25 +125,65 @@ const Sidebar = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Source Path
                   </label>
-                  <input
-                    type="text"
-                    value={newTabData.source_path}
-                    onChange={(e) => setNewTabData({ ...newTabData, source_path: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="/mnt/media/tv"
-                  />
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={newTabData.source_path}
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 focus:outline-none"
+                      placeholder="/mnt/media/tv"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setActiveBrowserField(activeBrowserField === 'source' ? null : 'source')}
+                      className="px-3 py-2 border border-gray-300 rounded-md bg-gray-100 hover:bg-gray-200 text-sm"
+                    >
+                      Browse
+                    </button>
+                  </div>
+                  {activeBrowserField === 'source' && (
+                    <div className="mt-2 h-48 border rounded-md overflow-hidden">
+                      <FileBrowser
+                        mode="directory"
+                        onSelect={(path) => {
+                          setNewTabData({ ...newTabData, source_path: path });
+                          setActiveBrowserField(null);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Destination Path
                   </label>
-                  <input
-                    type="text"
-                    value={newTabData.destination_path}
-                    onChange={(e) => setNewTabData({ ...newTabData, destination_path: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="/mnt/archive/Resilio_sync/tv_syncer"
-                  />
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={newTabData.destination_path}
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 focus:outline-none"
+                      placeholder="/mnt/archive..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setActiveBrowserField(activeBrowserField === 'destination' ? null : 'destination')}
+                      className="px-3 py-2 border border-gray-300 rounded-md bg-gray-100 hover:bg-gray-200 text-sm"
+                    >
+                      Browse
+                    </button>
+                  </div>
+                  {activeBrowserField === 'destination' && (
+                    <div className="mt-2 h-48 border rounded-md overflow-hidden">
+                      <FileBrowser
+                        mode="directory"
+                        onSelect={(path) => {
+                          setNewTabData({ ...newTabData, destination_path: path });
+                          setActiveBrowserField(null);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
