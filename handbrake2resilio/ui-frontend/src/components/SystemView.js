@@ -78,12 +78,12 @@ const SystemView = () => {
     );
   };
 
-  const systemData = systemLoad?.data || (systemLoad?.success === undefined ? systemLoad : {}) || {};
-  const healthData = health?.data || (health?.success === undefined ? health : {}) || {};
-  const processesData = processes?.data || (processes?.success === undefined ? processes : {}) || {};
-  const logsData = logs?.data || (logs?.success === undefined ? logs : {}) || {};
-  const configData = config?.data || (config?.success === undefined ? config : {}) || {};
-  const diskData = diskUsage?.data || (diskUsage?.success === undefined ? diskUsage : {}) || {};
+  const systemData = systemLoad?.data || systemLoad || {};
+  const healthData = health?.data || health || {};
+  const processesData = processes?.data || processes || {};
+  const logsData = logs?.data || logs || {};
+  const configData = config?.data || config || {};
+  const diskData = diskUsage?.data || diskUsage || {};
 
   return (
     <div className="space-y-6">

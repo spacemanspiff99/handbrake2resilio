@@ -1,0 +1,77 @@
+# Simplified Production Dockerfile for HandBrake2Resilio (Backend Only)
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Create non-root user
+RUN groupadd -r handbrake && useradd -r -g handbrake handbrake
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    curl \
+    wget \
+    gnupg \
+    software-properties-common \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install HandBrakeCLI
+RUN apt-get update && apt-get install -y \
+    handbrake-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Google Cloud SDK
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
+    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - \
+    && apt-get update && apt-get install -y google-cloud-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Terraform
+RUN wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | tee /usr/share/keyrings/hashicorp-archive-keyring.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list \
+    && apt-get update && apt-get install -y terraform \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up Python virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install Python dependencies
+COPY deployment/requirements.simple.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Install additional production dependencies
+RUN pip install --no-cache-dir \
+    psutil \
+    structlog \
+    PyJWT \
+    bcrypt \
+    flask-cors \
+    flask-socketio \
+    gunicorn
+
+# Set up application directory
+WORKDIR /app
+COPY --chown=handbrake:handbrake handbrake-service/ /app/
+COPY --chown=handbrake:handbrake config.py auth.py job_queue.py /app/
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/data /app/temp && chown -R handbrake:handbrake /app
+
+# Switch to non-root user
+USER handbrake
+
+# Expose ports
+EXPOSE 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8081/health || exit 1
+
+# Entry point
+CMD ["python3", "handbrake_service_simple.py"] 

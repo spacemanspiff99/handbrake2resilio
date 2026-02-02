@@ -121,8 +121,8 @@ const QueueView = () => {
     return `${progress || 0}%`;
   };
 
-  const queueData = queueStatus?.data || (queueStatus?.success === undefined ? queueStatus : {}) || {};
-  const jobsData = Array.isArray(jobs?.data) ? jobs.data : (Array.isArray(jobs) ? jobs : []);
+  const queueData = queueStatus?.data || queueStatus || {};
+  const jobsData = jobs?.data || jobs || [];
 
   return (
     <div className="space-y-6">

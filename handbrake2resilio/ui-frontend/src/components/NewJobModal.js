@@ -111,16 +111,11 @@ const NewJobModal = ({ onClose }) => {
                 <FileBrowser
                   mode="directory"
                   onSelect={(path) => {
-                    // Extract filename from input path if available
-                    let filename = "converted_video.mp4";
-                    if (inputPath) {
-                      const baseName = inputPath.split('/').pop().split('.').slice(0, -1).join('.') || inputPath.split('/').pop();
-                      filename = baseName + ".mp4";
-                    }
-                    
-                    // If path is a directory, append the filename
-                    const finalPath = path.endsWith('/') ? path + filename : path + "/" + filename;
-                    setOutputPath(finalPath);
+                    // For now, simple append filename logic would be needed in backend or here.
+                    // Assuming backend handles dir or full path. Prompt implies "Output Directory".
+                    // Let's assume we append the input filename + .mp4
+                    const filename = inputPath.split('/').pop().replace(/\.[^/.]+$/, "") + ".mp4";
+                    setOutputPath(path + "/" + filename);
                     setShowOutputBrowser(false);
                   }}
                 />

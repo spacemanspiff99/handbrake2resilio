@@ -4,7 +4,7 @@ services:
   # API Gateway Service (with SQLite)
   api-gateway:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile.api
     container_name: handbrake2resilio_api-gateway
     ports:
@@ -44,7 +44,7 @@ services:
   # HandBrake Service
   handbrake-service:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile.handbrake
     container_name: handbrake2resilio-handbrake
     ports:
@@ -87,7 +87,7 @@ services:
   # Frontend UI Service
   frontend:
     build:
-      context: ../ui-frontend
+      context: ./handbrake2resilio/ui-frontend
       dockerfile: Dockerfile
     container_name: handbrake2resilio-frontend
     ports:

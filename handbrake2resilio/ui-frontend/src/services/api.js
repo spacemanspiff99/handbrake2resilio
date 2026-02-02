@@ -12,14 +12,9 @@ const api = axios.create({
   },
 });
 
-// Request interceptor for logging and auth
+// Request interceptor for logging
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
     console.log(`🔧 API Request: ${config.method?.toUpperCase()} ${config.url}`);
     console.log('🔧 Request config:', {
       baseURL: config.baseURL,
@@ -44,8 +39,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     console.log(`✅ API Response: ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`);
-    // Return only the data part of the response
-    return response.data;
+    // console.log('✅ Response data preview:', JSON.stringify(response.data).substring(0, 200) + '...');
+    return response;
   },
   (error) => {
     console.error('❌ API Response Error:', error.response?.data || error.message);
@@ -204,15 +199,7 @@ export const filesystemAPI = {
   },
   scan: (path) => {
     console.log('🔧 Calling filesystemAPI.scan() with path:', path);
-    return api.post('/api/filesystem/scan', { path });
-  },
-  mkdir: (path, name) => {
-    console.log('🔧 Calling filesystemAPI.mkdir() with path:', path, 'name:', name);
-    return api.post('/api/filesystem/mkdir', { path, name });
-  },
-  getCachedContent: (path) => {
-    console.log('🔧 Calling filesystemAPI.getCachedContent() with path:', path);
-    return api.get('/api/filesystem/cache', { params: { path } });
+    return api.get('/api/filesystem/scan', { params: { path } });
   }
 };
 

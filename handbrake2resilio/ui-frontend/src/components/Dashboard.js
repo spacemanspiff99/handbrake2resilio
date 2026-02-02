@@ -73,26 +73,24 @@ const Dashboard = () => {
   }, [systemLoad, systemLoading, systemError, queueStatus, queueLoading, queueError, jobs, jobsError]);
 
   const getSystemStatusColor = () => {
-    const data = systemLoad?.data || systemLoad || {};
-    const { cpu_percent, memory_percent } = data;
-    if (cpu_percent === undefined) return 'text-gray-400';
+    if (!systemLoad) return 'text-gray-400';
+    const { cpu_percent, memory_percent } = systemLoad.data || systemLoad;
     if (cpu_percent > 80 || memory_percent > 80) return 'text-red-500';
     if (cpu_percent > 60 || memory_percent > 60) return 'text-yellow-500';
     return 'text-green-500';
   };
 
   const getQueueStatusColor = () => {
-    const data = queueStatus?.data || queueStatus || {};
-    const { running, pending } = data;
-    if (running === undefined) return 'text-gray-400';
+    if (!queueStatus) return 'text-gray-400';
+    const { running, pending } = queueStatus.data || queueStatus;
     if (running > 0) return 'text-yellow-500';
     if (pending > 0) return 'text-blue-500';
     return 'text-green-500';
   };
 
   const getRecentJobs = () => {
-    const jobsData = jobs?.data || jobs?.jobs || (Array.isArray(jobs) ? jobs : []);
-    if (!Array.isArray(jobsData)) return [];
+    const jobsData = jobs?.data || jobs?.jobs || [];
+    if (!jobsData) return [];
     return jobsData.slice(0, 5); // Show last 5 jobs
   };
 

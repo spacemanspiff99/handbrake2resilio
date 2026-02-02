@@ -18,8 +18,8 @@ export const AuthProvider = ({ children }) => {
           // Set token in default headers for subsequent requests
           api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
           
-          const data = await authAPI.verifyToken();
-          setUser(data.user);
+          const response = await authAPI.verifyToken();
+          setUser(response.data.user);
           setToken(storedToken);
           setIsAuthenticated(true);
         } catch (error) {
@@ -35,8 +35,8 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
-      const data = await authAPI.login(username, password);
-      const { token, user } = data;
+      const response = await authAPI.login(username, password);
+      const { token, user } = response.data;
       
       localStorage.setItem('token', token);
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;

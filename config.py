@@ -20,12 +20,12 @@ class SecurityConfig:
     """Security configuration with enhanced validation"""
 
     jwt_secret_key: str
-    jwt_expiration_hours: int = 168
+    jwt_expiration_hours: int = 24
     bcrypt_rounds: int = 12
     max_login_attempts: int = 5
     lockout_duration_minutes: int = 15
     jwt_algorithm: str = "HS256"
-    session_timeout_minutes: int = 10080
+    session_timeout_minutes: int = 60
 
     def __post_init__(self):
         """Validate security configuration"""
@@ -346,12 +346,12 @@ def load_config() -> Config:
         # Security config
         security = SecurityConfig(
             jwt_secret_key=jwt_secret_key,
-            jwt_expiration_hours=int(os.getenv("JWT_EXPIRATION_HOURS", "168")),
+            jwt_expiration_hours=int(os.getenv("JWT_EXPIRATION_HOURS", "24")),
             bcrypt_rounds=int(os.getenv("BCRYPT_ROUNDS", "12")),
             max_login_attempts=int(os.getenv("MAX_LOGIN_ATTEMPTS", "5")),
             lockout_duration_minutes=int(os.getenv("LOCKOUT_DURATION_MINUTES", "15")),
             jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
-            session_timeout_minutes=int(os.getenv("SESSION_TIMEOUT_MINUTES", "10080")),
+            session_timeout_minutes=int(os.getenv("SESSION_TIMEOUT_MINUTES", "60")),
         )
 
         # Resource config
