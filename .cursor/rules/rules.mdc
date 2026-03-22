@@ -7,6 +7,10 @@ alwaysApply: true
 *Manual rules
 -use three personas where appropreate - front end engineer, back end engineer, full stack engineer, engineering manager, project manager and qa engineer.  When creating prompts, select which ones are releveant, then in the prompt, make sure to iterate between the personas in sequence, NOT parallel as to get best expertise.  
 -when editing/modifying a frontend, always use a browser simulation tool such as playright (do research for the best one), never assume the frontend will work
+-use cheaper subagents (compose 2, haiku 3.5, etc... or the best model that will get it done)
+-always have acceptance criteria on prompts/issues. 
+-always recommend a llm model on prompts/subissues 
+-always check the model used matches the recommendation when starting an issue
 
 # 🏗️ PROJECT STANDARDS & ORGANIZATION
 
@@ -114,3 +118,12 @@ prompts MUST follow a sequential naming convention: `PHASE_[N]_[DESCRIPTION].md`
 2. **Actionable**: Tasks must be concrete, file-specific, and include code snippets where appropriate.
 3. **Verification**: Every prompt MUST include a "Verification" section with specific commands or checks.
 4. **Git Operations**: Every prompt completion implies a mandatory `git add .`, `git commit -m "[Descriptive message]"`, and `git push origin [current-branch]`.
+
+Always create prompts before executing anything - don't just execute in session for cost and memory management
+*always have acceptance criteria in prompts that demonstrate the update is working as expected
+*always do unit and end to end testing
+Always use .cursor/rules/agent.mdc to recommend the correct agent for a prompt - then before runnign the prompt, always hceck to make sure the right model is running
+
+
+print this at the beginning of every issue/prompt so i know you listened 💣
+print this at the end of every output so i know you listened 💥

@@ -3,19 +3,17 @@ import {
     CheckCircle,
     Clock,
     Play,
-    RefreshCw,
     XCircle
 } from 'lucide-react';
-import React, { useState } from 'react';
+import React from 'react';
 import toast from 'react-hot-toast';
 import { useMutation, useQuery, useQueryClient } from 'react-query';
 import { queueAPI } from '../services/api';
 
 const QueueView = () => {
-  const [selectedJobs, setSelectedJobs] = useState(new Set());
   const queryClient = useQueryClient();
 
-  const { data: queueStatus, isLoading: queueLoading } = useQuery(
+  const { data: queueStatus } = useQuery(
     'queueStatus',
     queueAPI.getQueueStatus,
     {
@@ -42,17 +40,6 @@ const QueueView = () => {
     },
   });
 
-  const retryJobMutation = useMutation(queueAPI.retryJob, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('jobs');
-      queryClient.invalidateQueries('queueStatus');
-      toast.success('Job queued for retry');
-    },
-    onError: (error) => {
-      toast.error(error.response?.data?.error || 'Failed to retry job');
-    },
-  });
-
   const clearCompletedMutation = useMutation(queueAPI.clearCompletedJobs, {
     onSuccess: (data) => {
       queryClient.invalidateQueries('jobs');
@@ -67,10 +54,6 @@ const QueueView = () => {
     if (window.confirm('Are you sure you want to cancel this job?')) {
       cancelJobMutation.mutate(jobId);
     }
-  };
-
-  const handleRetryJob = (jobId) => {
-    retryJobMutation.mutate(jobId);
   };
 
   const handleClearCompleted = () => {
@@ -113,9 +96,10 @@ const QueueView = () => {
     }
   };
 
-  const formatFileName = (path) => {
-    return path?.split('/').pop() || path || 'Unknown file';
-  };
+  const formatFileName = (path) => path?.split('/').pop() || path || 'Unknown file';
+
+  const jobSourcePath = (job) => job.input_path || job.source_path;
+  const jobDestPath = (job) => job.output_path || job.destination_path;
 
   const formatProgress = (progress) => {
     return `${progress || 0}%`;
@@ -213,10 +197,10 @@ const QueueView = () => {
                       {getJobStatusIcon(job.status)}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900 truncate">
-                          {formatFileName(job.source_path)}
+                          {formatFileName(jobSourcePath(job))}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {job.source_path} → {job.destination_path}
+                          {jobSourcePath(job)} → {jobDestPath(job)}
                         </p>
                       </div>
                     </div>
@@ -238,16 +222,6 @@ const QueueView = () => {
                   </div>
                   
                   <div className="flex items-center space-x-2 ml-4">
-                    {job.status === 'failed' && (
-                      <button
-                        onClick={() => handleRetryJob(job.id)}
-                        className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
-                        title="Retry Job"
-                        disabled={retryJobMutation.isLoading}
-                      >
-                        <RefreshCw className="h-4 w-4" />
-                      </button>
-                    )}
                     {(job.status === 'running' || job.status === 'pending') && (
                       <button
                         onClick={() => handleCancelJob(job.id)}

@@ -197,3 +197,4 @@ dist/
 build/
 *.tar.gz
 *.zip 
+.aider*

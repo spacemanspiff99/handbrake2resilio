@@ -1,8 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080';
-
-console.log('🔧 API Service initialized with base URL:', API_BASE_URL);
+const API_BASE_URL = process.env.REACT_APP_API_URL || '';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -12,208 +10,73 @@ const api = axios.create({
   },
 });
 
-// Request interceptor for logging and auth
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
-    console.log(`🔧 API Request: ${config.method?.toUpperCase()} ${config.url}`);
-    console.log('🔧 Request config:', {
-      baseURL: config.baseURL,
-      url: config.url,
-      method: config.method,
-      headers: config.headers
-    });
     return config;
   },
   (error) => {
-    console.error('❌ API Request Error:', error);
-    console.error('❌ Request error details:', {
-      message: error.message,
-      code: error.code,
-      config: error.config
-    });
+    console.error('API request error:', error);
     return Promise.reject(error);
   }
 );
 
-// Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => {
-    console.log(`✅ API Response: ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`);
-    // Return only the data part of the response
-    return response.data;
-  },
+  (response) => response.data,
   (error) => {
-    console.error('❌ API Response Error:', error.response?.data || error.message);
-    
-    // Handle 401 Unauthorized
+    console.error('API response error:', error.response?.data || error.message);
+
     if (error.response?.status === 401) {
-      // Prevent infinite loops if we are already on login page
       if (!window.location.pathname.includes('/login')) {
-        console.warn('🔒 401 Unauthorized - Redirecting to login');
         localStorage.removeItem('token');
         window.location.href = '/login';
       }
     }
 
-    console.error('❌ Response error details:', {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      url: error.config?.url,
-      method: error.config?.method,
-      data: error.response?.data
-    });
     return Promise.reject(error);
   }
 );
 
-// Auth API
 export const authAPI = {
-  login: (username, password) => {
-    console.log('🔧 Calling authAPI.login()');
-    return api.post('/api/auth/login', { username, password });
-  },
-  register: (username, password, email) => {
-    console.log('🔧 Calling authAPI.register()');
-    return api.post('/api/auth/register', { username, password, email });
-  },
-  verifyToken: () => {
-    console.log('🔧 Calling authAPI.verifyToken()');
-    return api.get('/api/auth/verify');
-  },
-  logout: () => {
-    console.log('🔧 Calling authAPI.logout()');
-    // Client-side only operation usually, but good to have the method structure
-    return Promise.resolve();
-  }
+  login: (username, password) => api.post('/api/auth/login', { username, password }),
+  register: (username, password, email) =>
+    api.post('/api/auth/register', { username, password, email }),
+  verifyToken: () => api.get('/api/auth/verify'),
+  logout: () => Promise.resolve(),
 };
 
-// Tabs API
 export const tabsAPI = {
-  getTabs: () => {
-    console.log('🔧 Calling tabsAPI.getTabs()');
-    return api.get('/api/tabs');
-  },
-  createTab: (data) => {
-    console.log('🔧 Calling tabsAPI.createTab() with data:', data);
-    return api.post('/api/tabs', data);
-  },
-  updateTab: (id, data) => {
-    console.log('🔧 Calling tabsAPI.updateTab() with id:', id, 'data:', data);
-    return api.put(`/api/tabs/${id}`, data);
-  },
-  deleteTab: (id) => {
-    console.log('🔧 Calling tabsAPI.deleteTab() with id:', id);
-    return api.delete(`/api/tabs/${id}`);
-  },
-  getTabSettings: (id) => {
-    console.log('🔧 Calling tabsAPI.getTabSettings() with id:', id);
-    return api.get(`/api/tabs/${id}/settings`);
-  },
+  getTabs: () => api.get('/api/tabs'),
+  createTab: (data) => api.post('/api/tabs', data),
+  updateTab: (id, data) => api.put(`/api/tabs/${id}`, data),
+  deleteTab: (id) => api.delete(`/api/tabs/${id}`),
+  getTabSettings: (id) => api.get(`/api/tabs/${id}/settings`),
 };
 
-// Queue API
 export const queueAPI = {
-  getQueueStatus: () => {
-    console.log('🔧 Calling queueAPI.getQueueStatus()');
-    return api.get('/api/queue');
-  },
-  addToQueue: (data) => {
-    console.log('🔧 Calling queueAPI.addToQueue() with data:', data);
-    return api.post('/api/queue', data);
-  },
-  getAllJobs: () => {
-    console.log('🔧 Calling queueAPI.getAllJobs()');
-    return api.get('/api/queue/jobs');
-  },
-  getJob: (id) => {
-    console.log('🔧 Calling queueAPI.getJob() with id:', id);
-    return api.get(`/api/queue/jobs/${id}`);
-  },
-  cancelJob: (id) => {
-    console.log('🔧 Calling queueAPI.cancelJob() with id:', id);
-    return api.delete(`/api/queue/jobs/${id}`);
-  },
-  retryJob: (id) => {
-    console.log('🔧 Calling queueAPI.retryJob() with id:', id);
-    return api.post(`/api/queue/jobs/${id}/retry`);
-  },
-  clearCompletedJobs: () => {
-    console.log('🔧 Calling queueAPI.clearCompletedJobs()');
-    return api.post('/api/queue/clear');
-  },
-  pauseQueue: () => {
-    console.log('🔧 Calling queueAPI.pauseQueue()');
-    return api.post('/api/queue/pause');
-  },
-  resumeQueue: () => {
-    console.log('🔧 Calling queueAPI.resumeQueue()');
-    return api.post('/api/queue/resume');
-  },
+  getQueueStatus: () => api.get('/api/queue'),
+  addToQueue: (data) => api.post('/api/jobs/add', data),
+  getAllJobs: () => api.get('/api/queue/jobs'),
+  getJob: (id) => api.get(`/api/jobs/status/${id}`),
+  cancelJob: (id) => api.post(`/api/jobs/cancel/${id}`),
+  clearCompletedJobs: () => api.post('/api/queue/clear'),
+  pauseQueue: () => api.post('/api/queue/pause'),
+  resumeQueue: () => api.post('/api/queue/resume'),
 };
 
-// System API
 export const systemAPI = {
-  getHealth: () => {
-    console.log('🔧 Calling systemAPI.getHealth()');
-    return api.get('/api/system/health');
-  },
-  getSystemLoad: () => {
-    console.log('🔧 Calling systemAPI.getSystemLoad()');
-    return api.get('/api/system/load');
-  },
-  getProcesses: () => {
-    console.log('🔧 Calling systemAPI.getProcesses()');
-    return api.get('/api/system/processes');
-  },
-  getRecentLogs: () => {
-    console.log('🔧 Calling systemAPI.getRecentLogs()');
-    return api.get('/api/system/logs');
-  },
-  getConfig: () => {
-    console.log('🔧 Calling systemAPI.getConfig()');
-    return api.get('/api/system/config');
-  },
-  getDiskUsage: () => {
-    console.log('🔧 Calling systemAPI.getDiskUsage()');
-    return api.get('/api/system/disk');
-  },
+  getHealth: () => api.get('/health'),
+  getSystemLoad: () => api.get('/api/system/load'),
 };
 
-// Content API (placeholder for future implementation)
-export const contentAPI = {
-  getContent: (tabId) => {
-    console.log('🔧 Calling contentAPI.getContent() with tabId:', tabId);
-    return api.get(`/api/content/${tabId}`);
-  },
-  scanContent: () => {
-    console.log('🔧 Calling contentAPI.scanContent()');
-    return api.post('/api/system/scan');
-  },
-};
-
-// Filesystem API
 export const filesystemAPI = {
-  browse: (path) => {
-    console.log('🔧 Calling filesystemAPI.browse() with path:', path);
-    return api.get('/api/filesystem/browse', { params: { path } });
-  },
-  scan: (path) => {
-    console.log('🔧 Calling filesystemAPI.scan() with path:', path);
-    return api.post('/api/filesystem/scan', { path });
-  },
-  mkdir: (path, name) => {
-    console.log('🔧 Calling filesystemAPI.mkdir() with path:', path, 'name:', name);
-    return api.post('/api/filesystem/mkdir', { path, name });
-  },
-  getCachedContent: (path) => {
-    console.log('🔧 Calling filesystemAPI.getCachedContent() with path:', path);
-    return api.get('/api/filesystem/cache', { params: { path } });
-  }
+  browse: (path) => api.get('/api/filesystem/browse', { params: { path } }),
+  scan: (path) => api.post('/api/filesystem/scan', { path }),
+  mkdir: (path, name) => api.post('/api/filesystem/mkdir', { path, name }),
+  getCachedContent: (path) => api.get('/api/filesystem/cache', { params: { path } }),
 };
 
 export default api;
