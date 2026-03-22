@@ -14,6 +14,7 @@ services:
       - DATABASE_PATH=/app/data/handbrake2resilio.db
       - HANDBRAKE_SERVICE_URL=http://handbrake-service:8081
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     volumes:
       - ${INPUT_TV_PATH:-/mnt/tv}:/mnt/tv:ro
       - ${INPUT_MOVIES_PATH:-/mnt/movies}:/mnt/movies:ro
@@ -71,7 +72,7 @@ services:
     container_name: h2r-frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "${FRONTEND_PORT:-7474}:80"
     networks:
       - h2r-network
     depends_on:

@@ -403,7 +403,7 @@ def start_conversion():
 
         # Create job
         job = ConversionJob(
-            id=data.get("job_id", f"job_{int(time.time())}"),
+            id=data.get("job_id") or data.get("id") or f"job_{int(time.time())}",
             input_path=input_path,
             output_path=output_path,
             quality=data.get("quality", 23),

@@ -9,6 +9,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import threading
 import time
+import uuid
 import requests
 from datetime import datetime
 from flask import Flask, jsonify, request, current_app
@@ -619,10 +620,11 @@ def add_job():
 
         # Create job object
         job = ConversionJob(
+            id=str(uuid.uuid4()),
             input_path=data.get("input_path"),
-            output_path=data.get("output_path"),
-            quality=data.get("quality", "medium"),
-            resolution=data.get("resolution", "720x480"),
+            output_path=data.get("output_path") or "",
+            quality=int(data.get("quality", 23)),
+            resolution=data.get("resolution", "1280x720"),
             video_bitrate=data.get("video_bitrate", 1000),
             audio_bitrate=data.get("audio_bitrate", 96),
         )
@@ -630,9 +632,11 @@ def add_job():
         # Save to database
         save_job_to_db(job)
 
-        # Forward to HandBrake service
+        # Forward to HandBrake service — pass job_id explicitly so service preserves the same ID
+        payload = job.to_dict()
+        payload["job_id"] = job.id
         handbrake_response = forward_to_handbrake_service(
-            "/convert", job.to_dict(), "POST"
+            "/convert", payload, "POST"
         )
 
         if handbrake_response:
