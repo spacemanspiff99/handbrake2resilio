@@ -4,6 +4,7 @@ Unit tests for job queue system
 """
 
 import os
+import sys
 import tempfile
 import unittest
 import threading
@@ -11,7 +12,10 @@ import time
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 
-from job_queue import JobQueue, ResourceMonitor, ConversionJob, JobStatus
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
+
+from shared.job_queue import JobQueue, ResourceMonitor, ConversionJob, JobStatus
 
 
 class TestResourceMonitor(unittest.TestCase):
@@ -26,9 +30,9 @@ class TestResourceMonitor(unittest.TestCase):
 
         self.monitor = ResourceMonitor(self.config)
 
-    @patch("job_queue.psutil.cpu_percent")
-    @patch("job_queue.psutil.virtual_memory")
-    @patch("job_queue.psutil.disk_usage")
+    @patch("shared.job_queue.psutil.cpu_percent")
+    @patch("shared.job_queue.psutil.virtual_memory")
+    @patch("shared.job_queue.psutil.disk_usage")
     def test_get_system_usage(self, mock_disk, mock_memory, mock_cpu):
         """Test system usage monitoring"""
         # Mock system resources
@@ -46,9 +50,9 @@ class TestResourceMonitor(unittest.TestCase):
         self.assertEqual(usage["disk_percent"], 75.0)
         self.assertEqual(usage["disk_free_gb"], 10.0)
 
-    @patch("job_queue.psutil.cpu_percent")
-    @patch("job_queue.psutil.virtual_memory")
-    @patch("job_queue.psutil.disk_usage")
+    @patch("shared.job_queue.psutil.cpu_percent")
+    @patch("shared.job_queue.psutil.virtual_memory")
+    @patch("shared.job_queue.psutil.disk_usage")
     def test_can_start_job_under_limits(self, mock_disk, mock_memory, mock_cpu):
         """Test job start when under resource limits"""
         # Mock system resources under limits
@@ -62,9 +66,9 @@ class TestResourceMonitor(unittest.TestCase):
 
         self.assertTrue(can_start)
 
-    @patch("job_queue.psutil.cpu_percent")
-    @patch("job_queue.psutil.virtual_memory")
-    @patch("job_queue.psutil.disk_usage")
+    @patch("shared.job_queue.psutil.cpu_percent")
+    @patch("shared.job_queue.psutil.virtual_memory")
+    @patch("shared.job_queue.psutil.disk_usage")
     def test_can_start_job_over_cpu_limit(self, mock_disk, mock_memory, mock_cpu):
         """Test job start when over CPU limit"""
         # Mock system resources over CPU limit
@@ -76,9 +80,9 @@ class TestResourceMonitor(unittest.TestCase):
 
         self.assertFalse(can_start)
 
-    @patch("job_queue.psutil.cpu_percent")
-    @patch("job_queue.psutil.virtual_memory")
-    @patch("job_queue.psutil.disk_usage")
+    @patch("shared.job_queue.psutil.cpu_percent")
+    @patch("shared.job_queue.psutil.virtual_memory")
+    @patch("shared.job_queue.psutil.disk_usage")
     def test_can_start_job_low_memory(self, mock_disk, mock_memory, mock_cpu):
         """Test job start when memory is low"""
         # Mock system resources with low memory
@@ -92,8 +96,8 @@ class TestResourceMonitor(unittest.TestCase):
 
         self.assertFalse(can_start)
 
-    @patch("job_queue.psutil.cpu_count")
-    @patch("job_queue.psutil.cpu_percent")
+    @patch("shared.job_queue.psutil.cpu_count")
+    @patch("shared.job_queue.psutil.cpu_percent")
     def test_get_optimal_job_count(self, mock_cpu_percent, mock_cpu_count):
         """Test optimal job count calculation"""
         mock_cpu_count.return_value = 8
@@ -284,9 +288,9 @@ class TestJobQueue(unittest.TestCase):
 
         self.assertEqual(status["running_jobs"], 1)
 
-    @patch("job_queue.psutil.cpu_percent")
-    @patch("job_queue.psutil.virtual_memory")
-    @patch("job_queue.psutil.disk_usage")
+    @patch("shared.job_queue.psutil.cpu_percent")
+    @patch("shared.job_queue.psutil.virtual_memory")
+    @patch("shared.job_queue.psutil.disk_usage")
     def test_resource_based_throttling(self, mock_disk, mock_memory, mock_cpu):
         """Test resource-based job throttling"""
         # Mock high resource usage

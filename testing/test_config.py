@@ -4,12 +4,16 @@ Unit tests for configuration management
 """
 
 import os
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
-from config import (
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
+
+from shared.config import (
     Config,
     SecurityConfig,
     ResourceConfig,
@@ -67,7 +71,7 @@ class TestConfig(unittest.TestCase):
 
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch("config.secrets.token_urlsafe")
+    @patch("shared.config.secrets.token_urlsafe")
     def test_jwt_secret_generation(self, mock_token):
         """Test JWT secret generation when not provided"""
         mock_token.return_value = "test-secret-key"
@@ -90,7 +94,7 @@ class TestConfig(unittest.TestCase):
         os.environ["CPU_LIMIT"] = "95"
         os.environ["MEMORY_LIMIT"] = "90"
 
-        with patch("config.logger") as mock_logger:
+        with patch("shared.config.logger") as mock_logger:
             config = Config()
 
             # Should log warnings for high limits

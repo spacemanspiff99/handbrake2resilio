@@ -19,6 +19,10 @@ os.environ["BACKUP_DIRECTORY"] = os.path.join(temp_dir, "backups")
 os.environ["MIN_DISK_GB"] = "0.1"
 os.environ["MIN_MEMORY_GB"] = "0.1"
 
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
+sys.path.insert(0, os.path.join(_ROOT, "api-gateway"))
+
 
 def print_status(message, status="INFO"):
     """Print status message with color coding"""
@@ -59,7 +63,7 @@ def check_configuration():
     print_status("🔧 Checking Configuration System...", "INFO")
 
     try:
-        from config import load_config
+        from shared.config import load_config
 
         config = load_config()
         print_status("✅ Configuration loaded successfully", "SUCCESS")
@@ -77,8 +81,8 @@ def check_job_queue():
     print_status("📋 Checking Job Queue System...", "INFO")
 
     try:
-        from job_queue import init_job_queue
-        from config import load_config
+        from shared.job_queue import init_job_queue
+        from shared.config import load_config
 
         config = load_config()
         job_queue = init_job_queue(config)
@@ -95,7 +99,7 @@ def check_authentication():
 
     try:
         from auth import init_auth_service
-        from config import load_config
+        from shared.config import load_config
 
         config = load_config()
         auth_service = init_auth_service(config)

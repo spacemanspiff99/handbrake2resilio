@@ -4,13 +4,18 @@ Simple test to verify configuration system works
 """
 
 import os
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
+sys.path.insert(0, os.path.join(_ROOT, "api-gateway"))
+
 # Test that we can import our modules
 try:
-    from config import Config
+    from shared.config import Config
 
     print("✅ Config module imported successfully")
 except ImportError as e:
@@ -24,7 +29,7 @@ except ImportError as e:
     print(f"❌ Auth module import failed: {e}")
 
 try:
-    from job_queue import JobQueue, ResourceMonitor, ConversionJob, JobStatus
+    from shared.job_queue import JobQueue, ResourceMonitor, ConversionJob, JobStatus
 
     print("✅ Job queue module imported successfully")
 except ImportError as e:
@@ -49,7 +54,7 @@ class TestSimpleConfig(unittest.TestCase):
         for key, value in self.env_vars.items():
             os.environ[key] = value
 
-    @patch("config.secrets.token_urlsafe")
+    @patch("shared.config.secrets.token_urlsafe")
     def test_config_creation(self, mock_token):
         """Test that configuration can be created"""
         mock_token.return_value = "test-secret-key"

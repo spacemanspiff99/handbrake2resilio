@@ -5,6 +5,8 @@ Provides REST API interface for video conversion operations with SQLite storage
 """
 
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import logging
 import threading
 import time
@@ -17,8 +19,8 @@ from flask_cors import CORS
 import structlog
 
 # Import our modules
-from config import config
-from job_queue import ConversionJob, JobStatus
+from shared.config import config
+from shared.job_queue import ConversionJob, JobStatus
 
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)

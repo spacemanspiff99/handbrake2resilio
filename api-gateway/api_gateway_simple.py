@@ -5,6 +5,8 @@ Main entry point with SQLite storage instead of Redis
 """
 
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import threading
 import time
 import sqlite3
@@ -16,9 +18,9 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import structlog
 
 # Import our modules
-from config import config
+from shared.config import config
 from auth import init_auth_service, require_auth
-from job_queue import ConversionJob, JobStatus
+from shared.job_queue import ConversionJob, JobStatus
 
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)

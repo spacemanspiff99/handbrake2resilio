@@ -4,11 +4,15 @@ Unit tests for authentication system
 """
 
 import os
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 import jwt
 import bcrypt
+
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_ROOT, "api-gateway"))
 
 from auth import AuthService, require_auth, require_role
 

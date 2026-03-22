@@ -198,3 +198,8 @@ build/
 *.tar.gz
 *.zip 
 .aider*
+
+# UI frontend build and test artifacts
+ui-frontend/build/
+ui-frontend/playwright-report/
+ui-frontend/test-results/

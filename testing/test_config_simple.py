@@ -19,8 +19,9 @@ os.environ["MIN_DISK_GB"] = "0.1"  # Lower disk requirement for testing
 os.environ["MIN_MEMORY_GB"] = "0.1"  # Lower memory requirement for testing
 
 # Import config module without triggering global load
-sys.path.insert(0, '.')
-from config import load_config
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
+from shared.config import load_config
 
 
 def test_config_loading():

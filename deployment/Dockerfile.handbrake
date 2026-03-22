@@ -57,8 +57,8 @@ RUN pip install --no-cache-dir \
 
 # Set up application directory
 WORKDIR /app
-COPY --chown=handbrake:handbrake api-gateway/ /app/
-COPY --chown=handbrake:handbrake config.py auth.py job_queue.py /app/
+COPY --chown=handbrake:handbrake handbrake-service/ /app/
+COPY --chown=handbrake:handbrake shared/ /app/shared/
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data /app/temp && chown -R handbrake:handbrake /app
@@ -67,11 +67,11 @@ RUN mkdir -p /app/logs /app/data /app/temp && chown -R handbrake:handbrake /app
 USER handbrake
 
 # Expose ports
-EXPOSE 8080
+EXPOSE 8081
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f http://localhost:8081/health || exit 1
 
 # Entry point
-CMD ["python3", "api_gateway_simple.py"] 
+CMD ["python3", "handbrake_service_simple.py"] 
