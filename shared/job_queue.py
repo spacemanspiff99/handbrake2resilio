@@ -7,7 +7,6 @@ Handles video conversion jobs with resource management and error recovery
 import threading
 import time
 import queue
-import sqlite3
 import psutil
 import os
 import subprocess
@@ -16,6 +15,8 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 from enum import Enum
 import logging
+
+from shared.db import get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +176,7 @@ class JobQueue:
     def _init_database(self):
         """Initialize job queue database"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 conn.execute(
                     """
                     CREATE TABLE IF NOT EXISTS jobs (
@@ -342,7 +343,7 @@ class JobQueue:
     def _update_job_in_db(self, job: ConversionJob):
         """Update job in database"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 conn.execute(
                     """
                     INSERT OR REPLACE INTO jobs (

@@ -1,36 +1,32 @@
-# Stage 1: Build the React app
-FROM node:18-alpine as build-stage
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
 # Install dependencies
-RUN npm install
+COPY ui-frontend/package.json ui-frontend/package-lock.json ./
+RUN npm ci --silent
 
-# Copy source code
-COPY . .
+# Copy source and build
+COPY ui-frontend/src ./src
+COPY ui-frontend/public ./public
 
-# Set build-time environment variables
-ENV REACT_APP_API_URL=http://192.168.10.18:8080
-ENV REACT_APP_WS_URL=ws://192.168.10.18:8080
-ENV REACT_APP_SOCKET_PATH=/socket.io/
-
-# Build the app
+# Build with optional API URL arg (defaults to empty = use relative paths)
+ARG REACT_APP_API_URL=""
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
 RUN npm run build
 
-# Stage 2: Serve with Nginx
+# Production stage: nginx
 FROM nginx:alpine
 
-# Copy built app from build stage
-COPY --from=build-stage /app/build /usr/share/nginx/html
+# Copy built app
+COPY --from=builder /app/build /usr/share/nginx/html
 
-# Copy nginx configuration if needed
-# COPY nginx.conf /etc/nginx/nginx.conf
+# Copy nginx config
+COPY ui-frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expose port 80
 EXPOSE 80
 
-# Start nginx
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget -q -O /dev/null http://localhost/health || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]

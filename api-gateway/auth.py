@@ -4,6 +4,11 @@ Authentication system for HandBrake2Resilio
 Handles user authentication, JWT tokens, and password management
 """
 
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import jwt
 import bcrypt
 import sqlite3
@@ -12,6 +17,8 @@ from typing import Optional, Dict, Any
 from functools import wraps
 from flask import request, jsonify, current_app
 import logging
+
+from shared.db import get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +34,7 @@ class AuthService:
     def _init_database(self):
         """Initialize the authentication database"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 conn.execute(
                     """
                     CREATE TABLE IF NOT EXISTS users (
@@ -122,7 +129,7 @@ class AuthService:
                 bcrypt.gensalt(self.config.security.bcrypt_rounds),
             ).decode("utf-8")
 
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 conn.execute(
                     """
                     INSERT INTO users (username, password_hash, email, role)
@@ -145,7 +152,7 @@ class AuthService:
     def authenticate_user(self, username: str, password: str) -> Optional[Dict]:
         """Authenticate user and return user info if successful"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 cursor = conn.execute(
                     """
                     SELECT id, username, password_hash, email, role, is_active
@@ -173,7 +180,7 @@ class AuthService:
                 return None
 
             # Update last login
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 conn.execute(
                     """
                     UPDATE users SET last_login = CURRENT_TIMESTAMP
@@ -217,7 +224,7 @@ class AuthService:
             )
 
             # Check if user still exists and is active
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 cursor = conn.execute(
                     """
                     SELECT id, username, email, role, is_active
@@ -254,7 +261,7 @@ class AuthService:
         """Change user password"""
         try:
             # Get current password hash
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 cursor = conn.execute(
                     """
                     SELECT password_hash FROM users WHERE id = ?
@@ -281,7 +288,7 @@ class AuthService:
             ).decode("utf-8")
 
             # Update password
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 conn.execute(
                     """
                     UPDATE users SET password_hash = ? WHERE id = ?
@@ -303,7 +310,7 @@ class AuthService:
             logger.info(f"📝 Creating tab '{name}' for user {user_id}")
             logger.info(f"📂 Source: {source_path}, Destination: {destination_path}")
             
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 cursor = conn.execute(
                     """
                     INSERT INTO tabs (name, source_path, destination_path, source_type, profile, user_id)
@@ -323,8 +330,7 @@ class AuthService:
         """Get all tabs, optionally filtered by user"""
         try:
             logger.info(f"🔍 Getting tabs for user_id: {user_id}")
-            with sqlite3.connect(self.db_path) as conn:
-                conn.row_factory = sqlite3.Row
+            with get_db_connection(self.db_path) as conn:
                 if user_id:
                     cursor = conn.execute("SELECT * FROM tabs WHERE user_id = ?", (user_id,))
                 else:
@@ -354,7 +360,7 @@ class AuthService:
             values.append(tab_id)
             query = f"UPDATE tabs SET {', '.join(fields)} WHERE id = ?"
             
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 conn.execute(query, values)
                 conn.commit()
                 return True
@@ -365,7 +371,7 @@ class AuthService:
     def delete_tab(self, tab_id):
         """Delete a tab"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with get_db_connection(self.db_path) as conn:
                 conn.execute("DELETE FROM tabs WHERE id = ?", (tab_id,))
                 conn.commit()
                 return True

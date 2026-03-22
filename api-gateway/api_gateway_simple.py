@@ -9,7 +9,6 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import threading
 import time
-import sqlite3
 import requests
 from datetime import datetime
 from flask import Flask, jsonify, request, current_app
@@ -19,6 +18,30 @@ import structlog
 
 # Import our modules
 from shared.config import config
+
+
+def _validate_jwt_secret(cfg: dict) -> None:
+    """Fail fast if JWT_SECRET_KEY is not properly configured."""
+    key = cfg.get("jwt_secret_key") or ""
+    invalid_defaults = {"", "change-me-to-a-random-string"}
+
+    if not key or key in invalid_defaults or len(key) < 16:
+        print(
+            "\n" + "=" * 60 + "\n"
+            "ERROR: JWT_SECRET_KEY is not properly configured.\n\n"
+            "Generate a secure key with:\n"
+            "  openssl rand -base64 32\n\n"
+            "Then set it in your .env file:\n"
+            "  JWT_SECRET_KEY=<your-generated-key>\n"
+            + "=" * 60 + "\n",
+            flush=True,
+        )
+        sys.exit(1)
+
+
+_validate_jwt_secret({"jwt_secret_key": config.security.jwt_secret_key})
+
+from shared.db import get_db_connection
 from auth import init_auth_service, require_auth
 from shared.job_queue import ConversionJob, JobStatus
 
@@ -49,7 +72,7 @@ logger = structlog.get_logger()
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "default-secret-key")
+app.config["SECRET_KEY"] = config.security.jwt_secret_key
 
 # Configure CORS
 CORS(app, resources={
@@ -145,7 +168,7 @@ def init_job_database():
     """Initialize SQLite database for job tracking"""
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
 
-    with sqlite3.connect(db_path) as conn:
+    with get_db_connection(db_path) as conn:
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS jobs (
@@ -184,7 +207,7 @@ def get_cached_scan(path):
     """Get cached scan results from database"""
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
     try:
-        with sqlite3.connect(db_path) as conn:
+        with get_db_connection(db_path) as conn:
             cursor = conn.execute("SELECT content, last_scanned FROM scans WHERE path = ?", (path,))
             row = cursor.fetchone()
             if row:
@@ -203,7 +226,7 @@ def save_scan_to_db(path, content):
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
     try:
         import json
-        with sqlite3.connect(db_path) as conn:
+        with get_db_connection(db_path) as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO scans (path, content, last_scanned) VALUES (?, ?, ?)",
                 (path, json.dumps(content), datetime.now().isoformat())
@@ -311,7 +334,7 @@ def save_job_to_db(job):
     """Save job to SQLite database"""
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
 
-    with sqlite3.connect(db_path) as conn:
+    with get_db_connection(db_path) as conn:
         conn.execute(
             """
             INSERT OR REPLACE INTO jobs (
@@ -346,7 +369,7 @@ def get_job_from_db(job_id):
     """Get job from SQLite database"""
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
 
-    with sqlite3.connect(db_path) as conn:
+    with get_db_connection(db_path) as conn:
         cursor = conn.execute(
             """
             SELECT * FROM jobs WHERE id = ?
@@ -379,7 +402,7 @@ def get_all_jobs_from_db():
     """Get all jobs from SQLite database"""
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
 
-    with sqlite3.connect(db_path) as conn:
+    with get_db_connection(db_path) as conn:
         cursor = conn.execute("SELECT * FROM jobs ORDER BY created_at DESC")
         rows = cursor.fetchall()
 
@@ -445,7 +468,7 @@ def health_check():
         # Check database
         db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
         try:
-            with sqlite3.connect(db_path) as conn:
+            with get_db_connection(db_path) as conn:
                 conn.execute("SELECT 1")
             db_status = "healthy"
         except Exception as e:
@@ -1164,7 +1187,7 @@ def clear_completed_jobs():
     """Clear completed jobs from database"""
     try:
         db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
-        with sqlite3.connect(db_path) as conn:
+        with get_db_connection(db_path) as conn:
             cursor = conn.execute("DELETE FROM jobs WHERE status = 'completed'")
             cleared_count = cursor.rowcount
             conn.commit()

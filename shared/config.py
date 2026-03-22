@@ -5,7 +5,6 @@ Enhanced with production-ready features and validation
 """
 
 import os
-import secrets
 import sys
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 class SecurityConfig:
     """Security configuration with enhanced validation"""
 
-    jwt_secret_key: str
+    jwt_secret_key: Optional[str]
     jwt_expiration_hours: int = 24
     bcrypt_rounds: int = 12
     max_login_attempts: int = 5
@@ -35,6 +34,20 @@ class SecurityConfig:
             raise ValueError("JWT_EXPIRATION_HOURS must be between 1 and 168")
         if self.max_login_attempts < 1 or self.max_login_attempts > 10:
             raise ValueError("MAX_LOGIN_ATTEMPTS must be between 1 and 10")
+
+
+def _resolve_jwt_secret_key_from_env() -> Optional[str]:
+    """Return JWT secret from env, or None if unset, empty, or placeholder.
+
+    Does not auto-generate secrets; callers that require a key must validate separately.
+    """
+    raw = os.getenv("JWT_SECRET_KEY")
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    if not stripped or stripped == "change-me-to-a-random-string":
+        return None
+    return stripped
 
 
 @dataclass
@@ -337,11 +350,7 @@ def load_config() -> Config:
     """Load configuration from environment variables with enhanced error handling"""
 
     try:
-        # Generate JWT secret if not provided
-        jwt_secret_key = os.getenv("JWT_SECRET_KEY")
-        if not jwt_secret_key:
-            jwt_secret_key = secrets.token_urlsafe(32)
-            logger.warning("JWT_SECRET_KEY not provided, generated new secret")
+        jwt_secret_key = _resolve_jwt_secret_key_from_env()
 
         # Security config
         security = SecurityConfig(

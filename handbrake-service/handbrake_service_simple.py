@@ -10,7 +10,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import logging
 import threading
 import time
-import sqlite3
 import json
 import subprocess
 from datetime import datetime
@@ -20,6 +19,7 @@ import structlog
 
 # Import our modules
 from shared.config import config
+from shared.db import get_db_connection
 from shared.job_queue import ConversionJob, JobStatus
 
 # Create logs directory if it doesn't exist
@@ -59,7 +59,7 @@ def init_job_database():
     """Initialize SQLite database for job tracking"""
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
 
-    with sqlite3.connect(db_path) as conn:
+    with get_db_connection(db_path) as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS jobs (
@@ -138,7 +138,7 @@ def save_job_to_db(job):
     """Save job to SQLite database"""
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
 
-    with sqlite3.connect(db_path) as conn:
+    with get_db_connection(db_path) as conn:
         conn.execute(
             """
             INSERT OR REPLACE INTO jobs (
@@ -173,7 +173,7 @@ def get_job_from_db(job_id):
     """Get job from SQLite database"""
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
 
-    with sqlite3.connect(db_path) as conn:
+    with get_db_connection(db_path) as conn:
         cursor = conn.execute(
             """
             SELECT * FROM jobs WHERE id = ?
@@ -206,7 +206,7 @@ def get_all_jobs_from_db():
     """Get all jobs from SQLite database"""
     db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
 
-    with sqlite3.connect(db_path) as conn:
+    with get_db_connection(db_path) as conn:
         cursor = conn.execute("SELECT * FROM jobs ORDER BY created_at DESC")
         rows = cursor.fetchall()
 
