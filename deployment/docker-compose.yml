@@ -1,0 +1,93 @@
+version: "3.8"
+
+services:
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.api
+    container_name: h2r-api-gateway
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8080}:8080"
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DATABASE_PATH=/app/data/handbrake2resilio.db
+      - HANDBRAKE_SERVICE_URL=http://handbrake-service:8081
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ${INPUT_TV_PATH:-/mnt/tv}:/mnt/tv:ro
+      - ${INPUT_MOVIES_PATH:-/mnt/movies}:/mnt/movies:ro
+      - ${OUTPUT_PATH:-/mnt/archive/Resilio_sync}:/output:ro
+      - ../data:/app/data
+      - ../logs:/app/logs
+    networks:
+      - h2r-network
+    depends_on:
+      handbrake-service:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+
+  handbrake-service:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.handbrake
+    container_name: h2r-handbrake
+    restart: unless-stopped
+    ports:
+      - "${HANDBRAKE_PORT:-8081}:8081"
+    environment:
+      - DATABASE_PATH=/app/data/handbrake2resilio.db
+      - OUTPUT_ROOT=/output
+      - MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-2}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ${INPUT_TV_PATH:-/mnt/tv}:/mnt/tv:ro
+      - ${INPUT_MOVIES_PATH:-/mnt/movies}:/mnt/movies:ro
+      - ${OUTPUT_PATH:-/mnt/archive/Resilio_sync}:/output:rw
+      - ../data:/app/data
+      - ../logs:/app/logs
+    networks:
+      - h2r-network
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: ui-frontend/Dockerfile
+    container_name: h2r-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks:
+      - h2r-network
+    depends_on:
+      - api-gateway
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+networks:
+  h2r-network:
+    driver: bridge
+    name: handbrake2resilio-network
+
+volumes:
+  data:
+  logs:

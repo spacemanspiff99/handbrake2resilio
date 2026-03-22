@@ -37,6 +37,9 @@
 
 # Database files
 *.db
+data/*.db
+data/*.db-wal
+data/*.db-shm
 *.sqlite
 *.sqlite3
 *.mdb
@@ -48,8 +51,10 @@
 *.log
 *.out
 *.err
-logs/
+logs/*
+!logs/.gitkeep
 *.log.*
+logs/*.log
 
 # Build artifacts
 dist/
@@ -158,7 +163,6 @@ Thumbs.db
 
 # Logs
 *.log
-logs/
 log/
 
 # Temporary files

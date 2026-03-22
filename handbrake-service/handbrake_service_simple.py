@@ -22,6 +22,34 @@ from shared.config import config
 from shared.db import get_db_connection
 from shared.job_queue import ConversionJob, JobStatus
 
+OUTPUT_ROOT = os.environ.get("OUTPUT_ROOT", "/output")
+
+
+def default_output_path_from_input(input_path: str) -> str:
+    """
+    When no output_path is provided, map input under OUTPUT_ROOT:
+    strip /mnt/tv or /mnt/movies prefix, preserve subdirs, use .mkv extension.
+    """
+    input_norm = os.path.normpath(input_path)
+    prefixes = ("/mnt/tv", "/mnt/movies")
+    relative: str | None = None
+    for prefix in prefixes:
+        if input_norm == prefix:
+            relative = ""
+            break
+        if input_norm.startswith(prefix + os.sep):
+            relative = input_norm[len(prefix) + 1 :]
+            break
+    if relative is None:
+        stem, _ = os.path.splitext(os.path.basename(input_norm))
+        return os.path.join(OUTPUT_ROOT, f"{stem}.mkv")
+    if not relative:
+        stem, _ = os.path.splitext(os.path.basename(input_norm))
+        return os.path.join(OUTPUT_ROOT, f"{stem}.mkv")
+    stem, _ = os.path.splitext(relative)
+    return os.path.join(OUTPUT_ROOT, f"{stem}.mkv")
+
+
 # Create logs directory if it doesn't exist
 os.makedirs("logs", exist_ok=True)
 os.makedirs("data", exist_ok=True)
@@ -245,6 +273,10 @@ def run_handbrake_conversion(job):
         # Save to database
         save_job_to_db(job)
 
+        out_dir = os.path.dirname(job.output_path)
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
+
         # Build HandBrake command
         cmd = [
             "HandBrakeCLI",
@@ -339,18 +371,23 @@ def start_conversion():
 
         # Validate required fields
         input_path = data.get("input_path")
-        output_path = data.get("output_path")
+        raw_output = data.get("output_path")
 
-        if not input_path or not output_path:
+        if not input_path:
             return (
                 jsonify(
                     {
                         "error": "Missing required fields",
-                        "message": "input_path and output_path are required",
+                        "message": "input_path is required",
                     }
                 ),
                 400,
             )
+
+        if raw_output is not None and str(raw_output).strip():
+            output_path = str(raw_output).strip()
+        else:
+            output_path = default_output_path_from_input(input_path)
 
         # Check if system can handle the job
         if not can_start_job():
