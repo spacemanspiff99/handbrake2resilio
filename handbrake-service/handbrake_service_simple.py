@@ -151,7 +151,7 @@ def can_start_job():
 
     with job_lock:
         active_count = len(
-            [j for j in active_jobs.values() if j.status == JobStatus.RUNNING]
+            [entry["job"] for entry in active_jobs.values() if entry["job"].status == JobStatus.RUNNING]
         )
 
     return (
@@ -264,11 +264,11 @@ def run_handbrake_conversion(job):
     try:
         logger.info(f"Starting conversion for job {job.id}")
 
-        # Update job status
+        # Update job status and register in active_jobs (no process yet)
         with job_lock:
             job.status = JobStatus.RUNNING
             job.started_at = datetime.utcnow()
-            active_jobs[job.id] = job
+            active_jobs[job.id] = {"job": job, "process": None}
 
         # Save to database
         save_job_to_db(job)
@@ -295,10 +295,13 @@ def run_handbrake_conversion(job):
             "--json",  # Enable JSON output for progress
         ]
 
-        # Run conversion
+        # Run conversion and store Popen reference for cancellation
         process = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
         )
+        with job_lock:
+            if job.id in active_jobs:
+                active_jobs[job.id]["process"] = process
 
         # Monitor progress
         while True:
@@ -316,8 +319,15 @@ def run_handbrake_conversion(job):
                 except json.JSONDecodeError:
                     pass  # Skip non-JSON output
 
-        # Check result
+        # Check result — skip DB update if job was externally cancelled
         return_code = process.poll()
+        with job_lock:
+            was_cancelled = job.status == JobStatus.CANCELLED
+
+        if was_cancelled:
+            logger.info(f"Job {job.id} was cancelled; skipping completion update")
+            return
+
         if return_code == 0:
             job.status = JobStatus.COMPLETED
             job.progress = 100.0
@@ -328,14 +338,18 @@ def run_handbrake_conversion(job):
             job.error_message = f"HandBrake failed with return code {return_code}"
             logger.error(f"Job {job.id} failed: {job.error_message}")
 
-        # Save to database
+        # Save to database and remove from active tracking
         save_job_to_db(job)
+        with job_lock:
+            active_jobs.pop(job.id, None)
 
     except Exception as e:
         logger.error(f"Error in conversion for job {job.id}: {e}")
         job.status = JobStatus.FAILED
         job.error_message = str(e)
         save_job_to_db(job)
+        with job_lock:
+            active_jobs.pop(job.id, None)
 
 
 @app.route("/health")
@@ -345,7 +359,7 @@ def health_check():
         usage = get_system_usage()
         with job_lock:
             active_count = len(
-                [j for j in active_jobs.values() if j.status == JobStatus.RUNNING]
+                [e for e in active_jobs.values() if e["job"].status == JobStatus.RUNNING]
             )
 
         return jsonify(
@@ -438,7 +452,7 @@ def get_job_status(job_id):
         # Check active jobs first
         with job_lock:
             if job_id in active_jobs:
-                return jsonify(active_jobs[job_id].to_dict())
+                return jsonify(active_jobs[job_id]["job"].to_dict())
 
         # Check database
         job = get_job_from_db(job_id)
@@ -466,8 +480,8 @@ def list_jobs():
 
         # Add active jobs
         with job_lock:
-            for job in active_jobs.values():
-                jobs.append(job.to_dict())
+            for entry in active_jobs.values():
+                jobs.append(entry["job"].to_dict())
 
         return jsonify({"jobs": jobs, "count": len(jobs)})
 
@@ -476,41 +490,73 @@ def list_jobs():
         return jsonify({"error": "Failed to list jobs", "message": str(e)}), 500
 
 
+def _terminate_process(process: subprocess.Popen, job_id: str) -> None:
+    """Send SIGTERM then SIGKILL to a HandBrakeCLI subprocess."""
+    if process is None:
+        return
+    try:
+        process.terminate()
+        logger.info(f"Sent SIGTERM to process for job {job_id}, waiting up to 5s")
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Process for job {job_id} did not exit after SIGTERM; sending SIGKILL")
+            process.kill()
+            process.wait()
+        logger.info(f"Process for job {job_id} terminated (returncode={process.returncode})")
+    except OSError as exc:
+        # Process may have already exited
+        logger.warning(f"OSError while terminating process for job {job_id}: {exc}")
+
+
+def _cleanup_partial_output(output_path: str, job_id: str) -> None:
+    """Remove a partial output file left by a cancelled conversion."""
+    if output_path and os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+            logger.info(f"Removed partial output file for job {job_id}: {output_path}")
+        except OSError as exc:
+            logger.warning(f"Could not remove partial output for job {job_id}: {exc}")
+
+
 @app.route("/cancel/<job_id>", methods=["POST"])
 def cancel_job(job_id):
-    """Cancel a running job"""
+    """Cancel a running job by killing the HandBrakeCLI subprocess."""
     try:
+        process_to_kill = None
+        output_path_to_clean = None
+
         with job_lock:
-            if job_id in active_jobs:
-                job = active_jobs[job_id]
-                if job.status == JobStatus.RUNNING:
-                    # TODO: Implement actual job cancellation
-                    job.status = JobStatus.CANCELLED
-                    save_job_to_db(job)
-                    logger.info(f"Job {job_id} cancelled")
-                    return jsonify(
-                        {"message": "Job cancelled successfully", "job_id": job_id}
-                    )
-                else:
-                    return (
-                        jsonify(
-                            {
-                                "error": "Job not running",
-                                "message": f"Job {job_id} is not currently running",
-                            }
-                        ),
-                        400,
-                    )
-            else:
+            if job_id not in active_jobs:
                 return (
-                    jsonify(
-                        {
-                            "error": "Job not found",
-                            "message": f"Job {job_id} does not exist",
-                        }
-                    ),
+                    jsonify({"error": "Job not found", "message": f"Job {job_id} does not exist"}),
                     404,
                 )
+
+            entry = active_jobs[job_id]
+            job = entry["job"]
+
+            if job.status != JobStatus.RUNNING:
+                return (
+                    jsonify({"error": "Job not running", "message": f"Job {job_id} is not currently running"}),
+                    400,
+                )
+
+            # Mark cancelled and capture references before releasing lock
+            job.status = JobStatus.CANCELLED
+            process_to_kill = entry.get("process")
+            output_path_to_clean = job.output_path
+            active_jobs.pop(job_id)
+
+        # Kill the subprocess outside the lock to avoid blocking
+        _terminate_process(process_to_kill, job_id)
+
+        # Persist cancelled status and clean up partial file
+        save_job_to_db(job)
+        _cleanup_partial_output(output_path_to_clean, job_id)
+
+        logger.info(f"Job {job_id} cancelled successfully")
+        return jsonify({"message": "Job cancelled successfully", "job_id": job_id})
 
     except Exception as e:
         logger.error(f"Error cancelling job: {e}")
