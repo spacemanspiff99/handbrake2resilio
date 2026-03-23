@@ -7,6 +7,7 @@ set -euo pipefail
 
 COMPOSE_FILE="deployment/docker-compose.yml"
 ENV_FILE=".env"
+COMPOSE_CMD="docker compose -f $COMPOSE_FILE --env-file $ENV_FILE"
 CONTAINERS=("h2r-api-gateway" "h2r-handbrake" "h2r-frontend")
 HEALTH_TIMEOUT=120  # seconds to wait for all containers healthy
 
@@ -61,7 +62,7 @@ ok "Docker is running"
 # ── 2. Stop and remove existing containers ──────────────────────────────────
 info "Step 2/6: Stopping existing containers"
 
-docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
+$COMPOSE_CMD down --remove-orphans 2>/dev/null || true
 ok "Previous containers stopped"
 
 # ── 3. Prune build cache to avoid stale layers ──────────────────────────────
@@ -72,7 +73,11 @@ ok "Build cache pruned"
 # ── 4. Build and start ───────────────────────────────────────────────────────
 info "Step 4/6: Building and starting containers (this takes 5-10 min on first run)"
 echo ""
-docker compose -f "$COMPOSE_FILE" up --build -d
+# Ensure data/logs dirs are writable by container user (uid=999)
+mkdir -p data logs
+chmod 777 data logs
+
+$COMPOSE_CMD up --build -d
 echo ""
 ok "Containers started"
 
@@ -107,10 +112,10 @@ if [[ "$ALL_HEALTHY" == "true" ]]; then
     ok "All ${#CONTAINERS[@]} containers healthy after ${ELAPSED}s"
 else
     warn "Health timeout reached after ${HEALTH_TIMEOUT}s — showing container status:"
-    docker compose -f "$COMPOSE_FILE" ps
+    $COMPOSE_CMD ps
     echo ""
     warn "Showing last 30 lines of logs per service:"
-    docker compose -f "$COMPOSE_FILE" logs --tail=30
+    $COMPOSE_CMD logs --tail=30
     fail "Not all containers reached healthy state — see logs above"
 fi
 
