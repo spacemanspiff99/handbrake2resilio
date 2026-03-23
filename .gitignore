@@ -184,6 +184,7 @@ service_account.json
 # Google Cloud
 .gcloud/
 *.json
+!ui-frontend/package-lock.json
 
 # Testing
 .coverage
