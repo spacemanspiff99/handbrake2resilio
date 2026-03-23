@@ -11,6 +11,10 @@ alwaysApply: true
 -always have acceptance criteria on prompts/issues. 
 -always recommend a llm model on prompts/subissues 
 -always check the model used matches the recommendation when starting an issue
+-move prompts to completed prompts folder when complete
+-prompts should have 4 digit number at the beginning - i.e. 0001 denoting sequence, although should rely more on lienar issues.
+-only touch lienar issues in handbrake2resilio project, NO OTHER PROJECTS
+-all linear issues created should be in handbrake2resilio project
 
 # 🏗️ PROJECT STANDARDS & ORGANIZATION
 
