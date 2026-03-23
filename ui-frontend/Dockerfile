@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY ui-frontend/package.json ui-frontend/package-lock.json ./
-RUN npm ci --silent
+RUN npm ci
 
 # Copy source and build
 COPY ui-frontend/src ./src
