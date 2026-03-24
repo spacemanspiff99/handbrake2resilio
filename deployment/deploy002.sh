@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# HandBrake2Resilio Simple Microservices Deployment Script
+# deploy002.sh — remote simple-stack deploy (SSH + docker-compose.simple.yml)
 # Deploys the simplified microservices architecture with SQLite storage
 
 set -e

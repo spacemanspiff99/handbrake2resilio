@@ -1108,7 +1108,8 @@ def update_tab(tab_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@app.route("/api/tabs/<tab_id>/settings", methods=["GET"])
+@app.route("/api/tabs/<int:tab_id>/settings", methods=["GET"])
+@require_auth
 def get_tab_settings(tab_id):
     """Get tab settings"""
     try:

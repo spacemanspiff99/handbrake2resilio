@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy_h2r.sh — HandBrake2Resilio deployment script
-# Run from the PROJECT ROOT: bash deployment/deploy_h2r.sh
+# deploy001.sh — HandBrake2Resilio local Docker Compose deployment
+# Run from the PROJECT ROOT: bash deployment/deploy001.sh
 # =============================================================================
 set -euo pipefail
 
