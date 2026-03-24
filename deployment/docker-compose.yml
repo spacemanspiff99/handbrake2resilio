@@ -1,88 +1,99 @@
-version: "3.8"
-
 services:
   api-gateway:
     build:
       context: ..
       dockerfile: deployment/Dockerfile.api
     container_name: h2r-api-gateway
-    restart: unless-stopped
     ports:
       - "${API_PORT:-8080}:8080"
     environment:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - DATABASE_PATH=/app/data/handbrake2resilio.db
+      - DATABASE_PATH=/data/handbrake.db
       - HANDBRAKE_SERVICE_URL=http://handbrake-service:8081
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
     volumes:
-      - ${INPUT_TV_PATH:-/mnt/tv}:/mnt/tv:ro
-      - ${INPUT_MOVIES_PATH:-/mnt/movies}:/mnt/movies:ro
-      - ${OUTPUT_PATH:-/mnt/archive/Resilio_sync}:/output:ro
-      - ../data:/app/data
-      - ../logs:/app/logs
-    networks:
-      - h2r-network
+      - app-data:/data:rw
+      - ${MEDIA_INPUT_PATH:-/tmp/media_input}:/media/input:ro
+      - ${MEDIA_OUTPUT_PATH:-/tmp/media_output}:/media/output:ro
     depends_on:
       handbrake-service:
         condition: service_healthy
+    restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       start_period: 15s
       retries: 3
+    networks:
+      - h2r-network
 
   handbrake-service:
     build:
       context: ..
       dockerfile: deployment/Dockerfile.handbrake
     container_name: h2r-handbrake
-    restart: unless-stopped
     ports:
       - "${HANDBRAKE_PORT:-8081}:8081"
     environment:
-      - DATABASE_PATH=/app/data/handbrake2resilio.db
-      - OUTPUT_ROOT=/output
+      - DATABASE_PATH=/data/handbrake.db
+      - OUTPUT_ROOT=/media/output
       - MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-2}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MEDIA_INPUT_PATH=/media/input
+      - MEDIA_OUTPUT_PATH=/media/output
     volumes:
-      - ${INPUT_TV_PATH:-/mnt/tv}:/mnt/tv:ro
-      - ${INPUT_MOVIES_PATH:-/mnt/movies}:/mnt/movies:ro
-      - ${OUTPUT_PATH:-/mnt/archive/Resilio_sync}:/output:rw
-      - ../data:/app/data
-      - ../logs:/app/logs
-    networks:
-      - h2r-network
+      - app-data:/data:rw
+      - ${MEDIA_INPUT_PATH:-/tmp/media_input}:/media/input:ro
+      - ${MEDIA_OUTPUT_PATH:-/tmp/media_output}:/media/output:rw
+    restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 30s
       timeout: 10s
       start_period: 20s
       retries: 3
+    networks:
+      - h2r-network
 
   frontend:
     build:
       context: ..
       dockerfile: ui-frontend/Dockerfile
     container_name: h2r-frontend
-    restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-7474}:80"
-    networks:
-      - h2r-network
     depends_on:
       - api-gateway
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
+    networks:
+      - h2r-network
 
 networks:
   h2r-network:
@@ -90,5 +101,5 @@ networks:
     name: handbrake2resilio-network
 
 volumes:
-  data:
-  logs:
+  app-data:
+    name: h2r-app-data

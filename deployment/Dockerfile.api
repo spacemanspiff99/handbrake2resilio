@@ -1,28 +1,54 @@
-FROM python:3.11-slim
+# Multi-stage API image: deps built in builder, minimal runtime with curl for HEALTHCHECK.
+#
+# Security: run containers with no extra capabilities, e.g. in docker-compose.yml:
+#   security_opt:
+#     - no-new-privileges:true
+# (Dockerfile cannot set --security-opt; it belongs in compose/run flags.)
 
-# Install only curl for health checks
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+# -----------------------------------------------------------------------------
+# Stage 1: builder — install Python dependencies into a venv (no curl/apt bloat).
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# Compiler toolchain only in builder (discarded) — psutil may build from source on some arches.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY deployment/requirements.simple.txt requirements.txt
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# -----------------------------------------------------------------------------
+# Stage 2: runtime — venv + app source only; curl for HEALTHCHECK.
+# -----------------------------------------------------------------------------
+FROM python:3.11-slim AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install Python dependencies
-COPY deployment/requirements.simple.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1
 
-# Copy service code
 COPY api-gateway/ ./api-gateway/
 COPY shared/ ./shared/
 
-# Create non-root user
-RUN groupadd -r handbrake && useradd -r -g handbrake handbrake
+RUN groupadd -r appuser \
+    && useradd -r -g appuser appuser \
+    && mkdir -p /app/logs /app/data /app/temp \
+    && chown -R appuser:appuser /app
 
-# Create required directories with correct ownership
-RUN mkdir -p /app/logs /app/data /app/temp \
-    && chown -R handbrake:handbrake /app
-
-USER handbrake
+USER appuser
 
 EXPOSE 8080
 

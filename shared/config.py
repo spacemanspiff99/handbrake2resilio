@@ -5,20 +5,34 @@ Enhanced with production-ready features and validation
 """
 
 import os
+import secrets
 import sys
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 import logging
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Environment variables that must be set for staging/production.
+# JWT_SECRET_KEY: required unless ENVIRONMENT=development (ephemeral secret); see resolver.
+REQUIRED_ENVIRONMENT_VARIABLES: tuple[str, ...] = ("JWT_SECRET_KEY",)
+
+
+# Documented .env placeholders — refuse so copy-paste does not run with a known value.
+_JWT_PLACEHOLDER_SECRETS: frozenset[str] = frozenset(
+    {
+        "change-me-to-a-random-string",
+        "change-me-to-a-random-string-at-least-16-chars",
+    }
+)
 
 
 @dataclass
 class SecurityConfig:
     """Security configuration with enhanced validation"""
 
-    jwt_secret_key: Optional[str]
+    jwt_secret_key: str
     jwt_expiration_hours: int = 24
     bcrypt_rounds: int = 12
     max_login_attempts: int = 5
@@ -36,18 +50,47 @@ class SecurityConfig:
             raise ValueError("MAX_LOGIN_ATTEMPTS must be between 1 and 10")
 
 
-def _resolve_jwt_secret_key_from_env() -> Optional[str]:
-    """Return JWT secret from env, or None if unset, empty, or placeholder.
+def _resolve_jwt_secret_key_from_env() -> str:
+    """Resolve JWT secret from ``JWT_SECRET_KEY`` or a dev-only ephemeral value.
 
-    Does not auto-generate secrets; callers that require a key must validate separately.
+    - Staging/production: ``JWT_SECRET_KEY`` must be set, non-placeholder, >= 16 chars.
+    - Development (``ENVIRONMENT=development``): if unset or empty, uses
+      ``secrets.token_urlsafe(32)`` and logs a WARNING (no static fallback).
     """
-    raw = os.getenv("JWT_SECRET_KEY")
-    if raw is None:
-        return None
-    stripped = raw.strip()
-    if not stripped or stripped == "change-me-to-a-random-string":
-        return None
-    return stripped
+    env_name = os.getenv("ENVIRONMENT", "production").strip().lower()
+    dev_ephemeral_ok = env_name == "development"
+
+    _missing_jwt_msg = (
+        "JWT_SECRET_KEY environment variable is required and must be "
+        "at least 16 characters"
+    )
+
+    raw = os.environ.get("JWT_SECRET_KEY", "").strip()
+
+    if not raw:
+        if dev_ephemeral_ok:
+            logger.warning(
+                "JWT_SECRET_KEY not set — using ephemeral secret. "
+                "Set JWT_SECRET_KEY in production."
+            )
+            return secrets.token_urlsafe(32)
+        logger.error(_missing_jwt_msg)
+        raise ValueError(_missing_jwt_msg)
+
+    if raw in _JWT_PLACEHOLDER_SECRETS:
+        msg = (
+            "JWT_SECRET_KEY must be set to a unique random value, not the "
+            "placeholder from .env.example (minimum 16 characters)"
+        )
+        logger.error(msg)
+        raise ValueError(msg)
+
+    if len(raw) < 16:
+        msg = "JWT_SECRET_KEY must be at least 16 characters"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    return raw
 
 
 @dataclass
@@ -347,9 +390,15 @@ class Config:
 
 
 def load_config() -> Config:
-    """Load configuration from environment variables with enhanced error handling"""
+    """Load configuration from environment variables with enhanced error handling.
+
+    JWT_SECRET_KEY: required for staging/production (validated in resolver). In
+    development only, an ephemeral secret may be used when unset; see
+    REQUIRED_ENVIRONMENT_VARIABLES.
+    """
 
     try:
+        # Required: no default; validated inside _resolve_jwt_secret_key_from_env
         jwt_secret_key = _resolve_jwt_secret_key_from_env()
 
         # Security config

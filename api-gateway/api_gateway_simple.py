@@ -20,28 +20,6 @@ import structlog
 # Import our modules
 from shared.config import config
 
-
-def _validate_jwt_secret(cfg: dict) -> None:
-    """Fail fast if JWT_SECRET_KEY is not properly configured."""
-    key = cfg.get("jwt_secret_key") or ""
-    invalid_defaults = {"", "change-me-to-a-random-string"}
-
-    if not key or key in invalid_defaults or len(key) < 16:
-        print(
-            "\n" + "=" * 60 + "\n"
-            "ERROR: JWT_SECRET_KEY is not properly configured.\n\n"
-            "Generate a secure key with:\n"
-            "  openssl rand -base64 32\n\n"
-            "Then set it in your .env file:\n"
-            "  JWT_SECRET_KEY=<your-generated-key>\n"
-            + "=" * 60 + "\n",
-            flush=True,
-        )
-        sys.exit(1)
-
-
-_validate_jwt_secret({"jwt_secret_key": config.security.jwt_secret_key})
-
 from shared.db import get_db_connection
 from auth import init_auth_service, require_auth
 from shared.job_queue import ConversionJob, JobStatus

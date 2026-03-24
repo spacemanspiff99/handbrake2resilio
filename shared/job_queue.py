@@ -16,7 +16,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 import logging
 
-from shared.db import get_db_connection
+from shared.db import commit_with_retry, execute_with_retry, get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +177,8 @@ class JobQueue:
         """Initialize job queue database"""
         try:
             with get_db_connection(self.db_path) as conn:
-                conn.execute(
+                execute_with_retry(
+                    conn,
                     """
                     CREATE TABLE IF NOT EXISTS jobs (
                         id TEXT PRIMARY KEY,
@@ -197,9 +198,9 @@ class JobQueue:
                         completed_at TIMESTAMP,
                         estimated_duration INTEGER DEFAULT 0
                     )
-                """
+                """,
                 )
-                conn.commit()
+                commit_with_retry(conn)
                 logger.info("Job queue database initialized")
         except Exception as e:
             logger.error(f"Failed to initialize job queue database: {e}")
@@ -344,7 +345,8 @@ class JobQueue:
         """Update job in database"""
         try:
             with get_db_connection(self.db_path) as conn:
-                conn.execute(
+                execute_with_retry(
+                    conn,
                     """
                     INSERT OR REPLACE INTO jobs (
                         id, input_path, output_path, quality, resolution,
@@ -372,7 +374,7 @@ class JobQueue:
                         job.estimated_duration,
                     ),
                 )
-                conn.commit()
+                commit_with_retry(conn)
         except Exception as e:
             logger.error(f"Failed to update job in database: {e}")
 

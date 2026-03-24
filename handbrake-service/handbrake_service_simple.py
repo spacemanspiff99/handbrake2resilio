@@ -22,16 +22,51 @@ from shared.config import config
 from shared.db import get_db_connection
 from shared.job_queue import ConversionJob, JobStatus
 
-OUTPUT_ROOT = os.environ.get("OUTPUT_ROOT", "/output")
+OUTPUT_ROOT = os.environ.get("OUTPUT_ROOT", "/media/output")
+
+
+INPUT_MOUNT_PREFIX = "/media/input"
+
+
+def validate_input_path(path: str) -> bool:
+    """
+    Ensure input_path stays under the container mount ``/media/input`` (must be that
+    prefix or a path under ``/media/input/``), blocks ``..`` segments, and when the
+    mount exists, rejects symlink escape via ``realpath``.
+    """
+    if not path or not isinstance(path, str):
+        return False
+    normalized = path.replace("\\", "/")
+    if any(seg == ".." for seg in normalized.split("/")):
+        return False
+    norm = os.path.normpath(path)
+    norm_fwd = norm.replace("\\", "/")
+    if any(seg == ".." for seg in norm_fwd.split("/")):
+        return False
+    root = INPUT_MOUNT_PREFIX
+    if not (norm_fwd == root or norm_fwd.startswith(root + "/")):
+        return False
+    if os.path.isdir(root):
+        try:
+            resolved_input = os.path.realpath(norm)
+            resolved_root = os.path.realpath(root)
+            if not (
+                resolved_input == resolved_root
+                or resolved_input.startswith(resolved_root + os.sep)
+            ):
+                return False
+        except OSError:
+            return False
+    return True
 
 
 def default_output_path_from_input(input_path: str) -> str:
     """
     When no output_path is provided, map input under OUTPUT_ROOT:
-    strip /mnt/tv or /mnt/movies prefix, preserve subdirs, use .mkv extension.
+    strip /media/input prefix, preserve subdirs, use .mkv extension.
     """
     input_norm = os.path.normpath(input_path)
-    prefixes = ("/mnt/tv", "/mnt/movies")
+    prefixes = (INPUT_MOUNT_PREFIX,)
     relative: str | None = None
     for prefix in prefixes:
         if input_norm == prefix:
@@ -75,8 +110,30 @@ structlog.configure(
 
 logger = structlog.get_logger()
 
+
+def check_media_directories() -> None:
+    """Warn at startup if standard Docker mount points are missing or unusable."""
+    input_root = INPUT_MOUNT_PREFIX
+    output_root = os.environ.get("OUTPUT_ROOT", "/media/output")
+    if not os.path.isdir(input_root):
+        logger.warning(
+            "media input mount missing or not a directory — conversions require paths under /media/input",
+            path=input_root,
+        )
+    elif not os.access(input_root, os.R_OK):
+        logger.warning("media input path is not readable", path=input_root)
+    if not os.path.isdir(output_root):
+        logger.warning(
+            "media output mount missing or not a directory — job output may fail",
+            path=output_root,
+        )
+    elif not os.access(output_root, os.W_OK):
+        logger.warning("media output path is not writable", path=output_root)
+
+
 app = Flask(__name__)
 CORS(app)
+check_media_directories()
 
 # Global job tracking
 active_jobs = {}
@@ -85,7 +142,7 @@ job_lock = threading.Lock()
 
 def init_job_database():
     """Initialize SQLite database for job tracking"""
-    db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
+    db_path = os.getenv("DATABASE_PATH", "/data/handbrake.db")
 
     with get_db_connection(db_path) as conn:
         conn.execute(
@@ -164,7 +221,7 @@ def can_start_job():
 
 def save_job_to_db(job):
     """Save job to SQLite database"""
-    db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
+    db_path = os.getenv("DATABASE_PATH", "/data/handbrake.db")
 
     with get_db_connection(db_path) as conn:
         conn.execute(
@@ -199,7 +256,7 @@ def save_job_to_db(job):
 
 def get_job_from_db(job_id):
     """Get job from SQLite database"""
-    db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
+    db_path = os.getenv("DATABASE_PATH", "/data/handbrake.db")
 
     with get_db_connection(db_path) as conn:
         cursor = conn.execute(
@@ -232,7 +289,7 @@ def get_job_from_db(job_id):
 
 def get_all_jobs_from_db():
     """Get all jobs from SQLite database"""
-    db_path = os.getenv("DATABASE_PATH", "/app/data/handbrake2resilio.db")
+    db_path = os.getenv("DATABASE_PATH", "/data/handbrake.db")
 
     with get_db_connection(db_path) as conn:
         cursor = conn.execute("SELECT * FROM jobs ORDER BY created_at DESC")
@@ -393,6 +450,17 @@ def start_conversion():
                     {
                         "error": "Missing required fields",
                         "message": "input_path is required",
+                    }
+                ),
+                400,
+            )
+
+        if not validate_input_path(input_path):
+            return (
+                jsonify(
+                    {
+                        "error": "Invalid input_path",
+                        "message": "input_path must be under /media/input with no path traversal (..)",
                     }
                 ),
                 400,
@@ -587,7 +655,7 @@ if __name__ == "__main__":
     logger.info("Starting HandBrake Service (Simplified)...")
     logger.info(f"Max concurrent jobs: {os.getenv('MAX_CONCURRENT_JOBS', 8)}")
     logger.info(
-        f"Database Path: {os.getenv('DATABASE_PATH', '/app/data/handbrake2resilio.db')}"
+        f"Database Path: {os.getenv('DATABASE_PATH', '/data/handbrake.db')}"
     )
 
     # Start the service

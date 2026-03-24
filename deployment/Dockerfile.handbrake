@@ -1,34 +1,46 @@
-FROM ubuntu:22.04
+# syntax=docker/dockerfile:1
+# Multi-stage: build wheels/deps on slim Python; runtime is ubuntu:22.04 for HandBrakeCLI (apt).
+FROM python:3.11-slim AS builder
+
+# psutil may build from source on some platforms; compiler stays out of the final image.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY deployment/requirements.simple.txt requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+FROM ubuntu:22.04 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install HandBrakeCLI and Python (Ubuntu needed for handbrake-cli apt package)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     handbrake-cli \
-    python3 \
-    python3-pip \
-    python3-venv \
+    python3.11 \
+    ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Runtime uses copied 3.11 site-packages; make `python3` resolve to 3.11 for CMD and shebangs.
+RUN ln -sf /usr/bin/python3.11 /usr/local/bin/python3
+
+ENV PYTHONPATH=/install/lib/python3.11/site-packages
+ENV PATH="/usr/local/bin:/install/bin:${PATH}"
+
+COPY --from=builder /install /install
+
 WORKDIR /app
-
-# Install Python dependencies
-COPY deployment/requirements.simple.txt requirements.txt
-RUN pip3 install --no-cache-dir -r requirements.txt
-
-# Copy service code
 COPY handbrake-service/ ./handbrake-service/
 COPY shared/ ./shared/
 
-# Create non-root user
-RUN groupadd -r handbrake && useradd -r -g handbrake handbrake
+RUN groupadd -r appuser \
+    && useradd -r -g appuser appuser \
+    && mkdir -p /app/logs /app/data /app/temp /app/output \
+    && chown -R appuser:appuser /app /install
 
-# Create required directories with correct ownership
-RUN mkdir -p /app/logs /app/data /app/temp /app/output \
-    && chown -R handbrake:handbrake /app
-
-USER handbrake
+USER appuser
 
 EXPOSE 8081
 

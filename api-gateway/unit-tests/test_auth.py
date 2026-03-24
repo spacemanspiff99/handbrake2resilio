@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 import jwt
 import bcrypt
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(_ROOT, "api-gateway"))
 
 from auth import AuthService, require_auth, require_role
@@ -28,7 +28,7 @@ class TestAuthService(unittest.TestCase):
         # Create test config
         self.config = MagicMock()
         self.config.storage.database_path = self.db_path
-        self.config.security.jwt_secret_key = "test-secret-key"
+        self.config.security.jwt_secret_key = "test-secret-key-16chars"
         self.config.security.jwt_algorithm = "HS256"
         self.config.security.jwt_expiration_hours = 24
         self.config.security.bcrypt_rounds = 12
@@ -103,7 +103,9 @@ class TestAuthService(unittest.TestCase):
 
     def test_token_creation(self):
         """Test JWT token creation"""
-        user_info = {"id": 1, "username": "testuser", "role": "user"}
+        self.auth_service.register_user("testuser", "testpass123")
+        user_info = self.auth_service.authenticate_user("testuser", "testpass123")
+        assert user_info is not None
 
         token = self.auth_service.create_token(user_info)
 
@@ -112,7 +114,9 @@ class TestAuthService(unittest.TestCase):
 
     def test_token_verification(self):
         """Test JWT token verification"""
-        user_info = {"id": 1, "username": "testuser", "role": "user"}
+        self.auth_service.register_user("testuser", "testpass123")
+        user_info = self.auth_service.authenticate_user("testuser", "testpass123")
+        assert user_info is not None
 
         # Create token
         token = self.auth_service.create_token(user_info)
@@ -173,7 +177,7 @@ class TestAuthService(unittest.TestCase):
         new_db_path = os.path.join(self.temp_dir, "test_admin.db")
         new_config = MagicMock()
         new_config.storage.database_path = new_db_path
-        new_config.security.jwt_secret_key = "test-secret-key"
+        new_config.security.jwt_secret_key = "test-secret-key-16chars"
         new_config.security.jwt_algorithm = "HS256"
         new_config.security.jwt_expiration_hours = 24
         new_config.security.bcrypt_rounds = 12
@@ -202,21 +206,27 @@ class TestAuthDecorators(unittest.TestCase):
 
     def test_require_auth_decorator(self):
         """Test require_auth decorator"""
+        mock_auth = MagicMock()
+        mock_auth.verify_token.return_value = None
+        self.app.auth_service = mock_auth
 
         @require_auth
         def protected_route():
             return {"message": "success"}
 
         # Test without token
-        with self.app.test_request_context():
-            response = protected_route()
-            self.assertEqual(response[1], 401)  # Unauthorized
+        with self.app.app_context():
+            with self.app.test_request_context():
+                response = protected_route()
+                self.assertEqual(response[1], 401)  # Unauthorized
 
         # Test with invalid token
-        with self.app.test_request_context():
-            request.headers = {"Authorization": "Bearer invalid-token"}
-            response = protected_route()
-            self.assertEqual(response[1], 401)  # Unauthorized
+        with self.app.app_context():
+            with self.app.test_request_context(
+                headers={"Authorization": "Bearer invalid-token"}
+            ):
+                response = protected_route()
+                self.assertEqual(response[1], 401)  # Unauthorized
 
     def test_require_role_decorator(self):
         """Test require_role decorator"""

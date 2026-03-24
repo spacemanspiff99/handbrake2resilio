@@ -12,7 +12,7 @@ import time
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _ROOT)
 
 from shared.job_queue import JobQueue, ResourceMonitor, ConversionJob, JobStatus
