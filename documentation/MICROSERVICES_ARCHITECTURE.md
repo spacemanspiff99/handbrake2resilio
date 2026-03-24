@@ -21,7 +21,7 @@ The HandBrake2Resilio system has been redesigned as a proper microservices archi
 
 ## 🎯 **Service Breakdown**
 
-### **1. API Gateway Service (`api_gateway.py`)**
+### **1. API Gateway Service (`api_gateway_simple.py`)**
 
 - **Purpose**: Main entry point for all client requests
 - **Responsibilities**:
@@ -50,7 +50,7 @@ The HandBrake2Resilio system has been redesigned as a proper microservices archi
 - `POST /api/jobs/cancel/<job_id>` - Cancel job
 - `GET /api/system/status` - System status
 
-### **2. HandBrake Service (`handbrake_service.py`)**
+### **2. HandBrake Service (`handbrake_service_simple.py`)**
 
 - **Purpose**: Dedicated video conversion service
 - **Responsibilities**:

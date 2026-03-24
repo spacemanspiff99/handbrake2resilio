@@ -1,96 +1,52 @@
 # Repository Cleanup Summary
 
-## ✅ Cleanup Completed
+## Current layout (handbrake2resilio)
 
-The repository has been cleaned up and organized according to the user rules:
-
-### 🗑️ Removed Files
-
-- All temporary deployment files created during WebSocket fixes
-- Test files from debugging process
-- Build artifacts and logs
-- Temporary Docker files
-- Large files and archives
-
-### 📁 Organized Structure
-
-Files have been organized following the pattern: `rep-engine-service/[service-name]/[function-name]/`
+Canonical Python entry points are the `*_simple.py` services; Dockerfiles invoke those files only.
 
 ```
-rep-engine-service/
-└── handbrake2resilio/
-    ├── api-gateway/
-    │   ├── api_gateway.py
-    │   ├── api_gateway_simple.py (✅ WORKING VERSION WITH FIXES)
-    │   ├── app_improved.py
-    │   ├── auth.py
-    │   └── job_queue.py
-    ├── handbrake-service/
-    │   ├── handbrake_service.py
-    │   └── handbrake_service_simple.py
-    ├── config/
-    │   └── config.py
-    ├── deployment/
-    │   ├── docker-compose.simple.yml
-    │   ├── docker-compose.microservices.yml
-    │   ├── docker-compose.production.yml
-    │   ├── deploy_simple.sh
-    │   ├── deploy_microservices.sh
-    │   ├── deploy_production.sh
-    │   ├── Dockerfile.production
-    │   ├── Dockerfile.production.simple
-    │   ├── requirements.simple.txt
-    │   ├── requirements.microservices.txt
-    │   ├── requirements.production.txt
-    │   └── deployment_readiness_check.py
-    ├── testing/
-    │   ├── test_auth.py
-    │   ├── test_config.py
-    │   ├── test_config_simple.py
-    │   ├── test_job_queue.py
-    │   └── test_simple.py
-    └── documentation/
-        ├── README.md
-        ├── DEPLOYMENT_GUIDE.md
-        ├── MICROSERVICES_ARCHITECTURE.md
-        ├── NEXT_STEPS.md
-        ├── PRODUCTION_IMPROVEMENTS.md
-        └── CLEANUP_SUMMARY.md (this file)
+handbrake2resilio/
+├── api-gateway/
+│   ├── api_gateway_simple.py   # canonical API gateway
+│   └── auth.py
+├── handbrake-service/
+│   └── handbrake_service_simple.py   # canonical HandBrake service
+├── shared/
+│   ├── config.py
+│   ├── db.py
+│   ├── job_queue.py
+│   └── __init__.py
+├── deployment/
+│   ├── docker-compose.yml
+│   ├── Dockerfile.api
+│   ├── Dockerfile.handbrake
+│   ├── deploy_simple.sh
+│   ├── deploy_h2r.sh
+│   ├── requirements.simple.txt
+│   ├── deployment_readiness_check.py
+│   └── .env.example
+├── testing/
+│   ├── test_auth.py
+│   ├── test_config.py
+│   ├── test_config_simple.py   # smoke script for load_config()
+│   └── test_job_queue.py
+├── ui-frontend/
+│   └── (React app)
+└── documentation/
+    └── (guides and architecture docs)
 ```
 
-### 🔧 Updated .gitignore
+## Removed / consolidated (WEA-132 and prior cleanups)
 
-Enhanced .gitignore following user security rules:
+- **testing/test_simple.py** — Removed: duplicate of other test modules; used try/except on import so `AuthService` / `JobQueue` / `ConversionJob` were often undefined; `Config()` calls did not match the current `Config` dataclass constructor. Use `test_auth.py`, `test_job_queue.py`, and `test_config.py` instead.
+- Earlier phases removed non-canonical `api_gateway.py`, `handbrake_service.py`, and extra compose/Dockerfile variants; see git history.
 
-- ✅ Prevents large files (>10MB) from being committed
-- ✅ Blocks passwords, API keys, and secrets
-- ✅ Excludes media files, databases, logs
-- ✅ Protects against common security risks
+## Security / .gitignore
 
-### 🎯 Current Working Status
+- Large files, secrets, and common artifacts are excluded per project `.gitignore` and user security rules.
 
-**The HandBrake2Resilio application is FULLY FUNCTIONAL:**
+## Working components
 
-- **API Gateway**: `api_gateway_simple.py` - ✅ Working with WebSocket and tab endpoint fixes
-- **Frontend**: Deployed and working on 192.168.10.18:3000
-- **All Issues Resolved**:
-  - ❌ "Failed to establish real-time connection" → ✅ FIXED
-  - ❌ "Failed to create tab" → ✅ FIXED
-
-### 📊 Repository Health
-
-- ✅ No duplicate folders
-- ✅ No files in root directory (except essential config)
-- ✅ Proper folder organization
-- ✅ Security rules implemented
-- ✅ No large files or sensitive data
-
-### 🔒 Security Compliance
-
-Following user rules:
-
-- ✅ Maximum file size: 10MB per file
-- ✅ No passwords or secrets in code
-- ✅ Environment variables for sensitive data
-- ✅ Comprehensive .gitignore patterns
-- ✅ No build artifacts committed
+- **API Gateway**: `api-gateway/api_gateway_simple.py`
+- **HandBrake worker**: `handbrake-service/handbrake_service_simple.py`
+- **Frontend**: `ui-frontend/`
