@@ -18,7 +18,6 @@ from flask_cors import CORS
 import structlog
 
 # Import our modules
-from shared.config import config
 from shared.db import get_db_connection
 from shared.job_queue import ConversionJob, JobStatus
 

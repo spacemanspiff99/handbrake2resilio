@@ -37,8 +37,8 @@ COPY shared/ ./shared/
 
 RUN groupadd -r appuser \
     && useradd -r -g appuser appuser \
-    && mkdir -p /app/logs /app/data /app/temp /app/output \
-    && chown -R appuser:appuser /app /install
+    && mkdir -p /app/logs /app/data /app/temp /app/output /data \
+    && chown -R appuser:appuser /app /install /data
 
 USER appuser
 
