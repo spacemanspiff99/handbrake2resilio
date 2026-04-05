@@ -164,3 +164,83 @@ def auth_token(api_client) -> str:
 def auth_headers(auth_token: str) -> dict:
     """Authorization header dict with Bearer token."""
     return {"Authorization": f"Bearer {auth_token}"}
+
+
+# ---------------------------------------------------------------------------
+# E2E fixtures — require full Docker stack running on configured ports.
+# Tests using these fixtures are marked with @pytest.mark.e2e and skip
+# automatically when the stack is not reachable.
+# ---------------------------------------------------------------------------
+
+import requests as _requests
+
+
+def _is_stack_running(url: str) -> bool:
+    try:
+        return _requests.get(f"{url}/health", timeout=5).status_code == 200
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def docker_stack():
+    """Skip all E2E tests if Docker stack is not running."""
+    api_url = os.environ.get("API_URL", "http://localhost:9080")
+    hb_url = os.environ.get("HB_URL", "http://localhost:9081")
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:9474")
+    if not _is_stack_running(api_url):
+        pytest.skip(
+            f"Docker stack not running at {api_url} — "
+            "start with: docker compose -f deployment/docker-compose.yml up -d"
+        )
+    return {"api_url": api_url, "hb_url": hb_url, "frontend_url": frontend_url}
+
+
+@pytest.fixture(scope="session")
+def api_url(docker_stack) -> str:
+    """E2E: API gateway base URL."""
+    return docker_stack["api_url"]
+
+
+@pytest.fixture(scope="session")
+def hb_url(docker_stack) -> str:
+    """E2E: HandBrake service base URL."""
+    return docker_stack["hb_url"]
+
+
+@pytest.fixture(scope="session")
+def frontend_url(docker_stack) -> str:
+    """E2E: Frontend base URL."""
+    return docker_stack["frontend_url"]
+
+
+@pytest.fixture(scope="session")
+def e2e_token(api_url) -> str:
+    """E2E: Login as admin and return a Bearer token."""
+    resp = _requests.post(
+        f"{api_url}/api/auth/login",
+        json={"username": "admin", "password": "admin123"},
+        timeout=10,
+    )
+    assert resp.status_code == 200, f"E2E login failed: {resp.text}"
+    return resp.json()["token"]
+
+
+@pytest.fixture(scope="session")
+def e2e_auth_headers(e2e_token) -> dict:
+    """E2E: Authorization headers for authenticated requests."""
+    return {"Authorization": f"Bearer {e2e_token}"}
+
+
+@pytest.fixture(autouse=False)
+def clean_test_jobs(api_url, e2e_auth_headers):
+    """E2E: Clean up test jobs after a test."""
+    yield
+    try:
+        _requests.post(
+            f"{api_url}/api/queue/clear",
+            headers=e2e_auth_headers,
+            timeout=5,
+        )
+    except Exception:
+        pass
