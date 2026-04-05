@@ -29,7 +29,7 @@ const QueueView = () => {
     }
   );
 
-  const cancelJobMutation = useMutation(queueAPI.cancelJob, {
+  const cancelJobMutation = useMutation(queueAPI.deleteJob, {
     onSuccess: () => {
       queryClient.invalidateQueries('jobs');
       queryClient.invalidateQueries('queueStatus');

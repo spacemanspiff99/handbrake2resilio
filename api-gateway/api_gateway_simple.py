@@ -419,13 +419,15 @@ def get_handbrake_service_status():
 
 
 def forward_to_handbrake_service(endpoint, data=None, method="GET"):
-    """Forward request to HandBrake service"""
+    """Forward request to HandBrake service."""
     try:
         url = f"{HANDBRAKE_SERVICE_URL}{endpoint}"
         if method == "GET":
             response = requests.get(url, timeout=10)
         elif method == "POST":
             response = requests.post(url, json=data, timeout=10)
+        elif method == "DELETE":
+            response = requests.delete(url, timeout=10)
         else:
             return None
 
@@ -739,6 +741,47 @@ def cancel_job(job_id):
                 {
                     "error": "Failed to cancel job",
                     "message": "An error occurred while cancelling job",
+                }
+            ),
+            500,
+        )
+
+
+@app.route("/api/jobs/<job_id>", methods=["DELETE"])
+@require_auth
+def delete_job(job_id: str):
+    """Cancel a job via DELETE — proxies to handbrake-service DELETE /jobs/<job_id>.
+
+    Handles both running and pending jobs.
+    """
+    try:
+        handbrake_response = forward_to_handbrake_service(
+            f"/jobs/{job_id}", method="DELETE"
+        )
+        if handbrake_response:
+            job = get_job_from_db(job_id)
+            if job:
+                job.status = JobStatus.CANCELLED
+                save_job_to_db(job)
+            logger.info(f"Job {job_id} cancelled via DELETE")
+            return jsonify({"message": "Job cancelled successfully"})
+        else:
+            return (
+                jsonify(
+                    {
+                        "error": "HandBrake service unavailable",
+                        "message": "Video conversion service is not responding",
+                    }
+                ),
+                503,
+            )
+    except Exception as e:
+        logger.error(f"Delete job error: {e}")
+        return (
+            jsonify(
+                {
+                    "error": "Failed to cancel job",
+                    "message": str(e),
                 }
             ),
             500,

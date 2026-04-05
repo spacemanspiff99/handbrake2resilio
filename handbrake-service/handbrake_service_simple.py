@@ -630,6 +630,55 @@ def cancel_job(job_id):
         return jsonify({"error": "Failed to cancel job", "message": str(e)}), 500
 
 
+@app.route("/jobs/<job_id>", methods=["DELETE"])
+def delete_job(job_id: str):
+    """Cancel a job by ID — handles both running and pending jobs.
+
+    Running jobs: kills the HandBrakeCLI subprocess.
+    Pending jobs: marks cancelled in DB without process kill.
+    Terminal states (completed/failed/cancelled): returns 400.
+    """
+    process_to_kill = None
+    output_path_to_clean = None
+
+    with job_lock:
+        if job_id in active_jobs:
+            entry = active_jobs[job_id]
+            job = entry["job"]
+            if job.status == JobStatus.RUNNING:
+                job.status = JobStatus.CANCELLED
+                process_to_kill = entry.get("process")
+                output_path_to_clean = job.output_path
+                active_jobs.pop(job_id)
+            else:
+                return (
+                    jsonify({"error": "Cannot cancel", "message": f"Job is {job.status.value}"}),
+                    400,
+                )
+        else:
+            # Check DB for pending job
+            job = get_job_from_db(job_id)
+            if not job:
+                return (
+                    jsonify({"error": "Job not found", "message": f"Job {job_id} does not exist"}),
+                    404,
+                )
+            if job.status not in (JobStatus.PENDING,):
+                return (
+                    jsonify({"error": "Cannot cancel", "message": f"Job is already {job.status.value}"}),
+                    400,
+                )
+            job.status = JobStatus.CANCELLED
+
+    _terminate_process(process_to_kill, job_id)
+    save_job_to_db(job)
+    if output_path_to_clean:
+        _cleanup_partial_output(output_path_to_clean, job_id)
+
+    logger.info(f"Job {job_id} cancelled via DELETE")
+    return jsonify({"message": "Job cancelled successfully", "job_id": job_id})
+
+
 @app.route("/")
 def root():
     """Root endpoint"""
@@ -644,6 +693,7 @@ def root():
                 "jobs": "/jobs",
                 "job_status": "/job/<job_id>",
                 "cancel": "/cancel/<job_id>",
+                "delete_job": "/jobs/<job_id> (DELETE)",
             },
         }
     )

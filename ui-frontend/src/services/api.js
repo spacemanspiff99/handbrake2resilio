@@ -17,6 +17,7 @@
  * | queueAPI.getAllJobs               | GET    | /api/queue/jobs                        | 200       |
  * | queueAPI.getJob(id)               | GET    | /api/jobs/status/<job_id>             | 200       |
  * | queueAPI.cancelJob(id)            | POST   | /api/jobs/cancel/<job_id>              | 200       |
+ * | queueAPI.deleteJob(id)            | DELETE | /api/jobs/<job_id>                     | 200       |
  * | queueAPI.clearCompletedJobs       | POST   | /api/queue/clear                       | 200       |
  * | queueAPI.pauseQueue               | POST   | /api/queue/pause                       | 200       |
  * | queueAPI.resumeQueue              | POST   | /api/queue/resume                      | 200       |
@@ -96,6 +97,7 @@ export const queueAPI = {
   getAllJobs: () => api.get('/api/queue/jobs'),
   getJob: (id) => api.get(`/api/jobs/status/${id}`),
   cancelJob: (id) => api.post(`/api/jobs/cancel/${id}`),
+  deleteJob: (id) => api.delete(`/api/jobs/${id}`),
   clearCompletedJobs: () => api.post('/api/queue/clear'),
   pauseQueue: () => api.post('/api/queue/pause'),
   resumeQueue: () => api.post('/api/queue/resume'),
