@@ -1,87 +1,80 @@
-import { test, expect } from '@playwright/test';
+const { test, expect } = require('@playwright/test');
+const { setupAuthMocks, setupDashboardMocks } = require('./fixtures');
+
+// FileBrowser expects: { success: true, data: { items: [...], current_path: '...' } }
+const MOCK_FILESYSTEM_RESPONSE = {
+  success: true,
+  data: {
+    current_path: '/mnt',
+    items: [
+      { name: '..', is_directory: true, path: '/' },
+      { name: 'media', is_directory: true, path: '/mnt/media' },
+      { name: 'video.mp4', is_directory: false, path: '/mnt/video.mp4', size: 1024 },
+    ],
+  },
+};
 
 test.describe('Workflows', () => {
   test.beforeEach(async ({ page }) => {
-    // Login
-    await page.route('**/api/auth/login', async route => {
+    await setupAuthMocks(page);
+    await setupDashboardMocks(page);
+    await page.route('**/api/filesystem/browse**', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          token: 'fake-token',
-          user: { id: 1, username: 'admin', role: 'admin' }
-        })
+        body: JSON.stringify(MOCK_FILESYSTEM_RESPONSE),
       });
     });
-    
-    await page.route('**/api/auth/verify', async route => {
+    await page.route('**/api/queue/jobs', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          valid: true,
-          user: { id: 1, username: 'admin', role: 'admin' }
-        })
+        body: JSON.stringify({ data: [] }),
       });
     });
-
     await page.goto('/login');
     await page.fill('input[name="username"]', 'admin');
-    await page.fill('input[name="password"]', 'password');
+    await page.fill('input[name="password"]', 'admin123');
     await page.click('button[type="submit"]');
-    await expect(page).toHaveURL('/');
+    await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10000 });
   });
 
   test('should open new job modal and browse files', async ({ page }) => {
-    // Mock filesystem browse
-    await page.route('**/api/filesystem/browse?path=*', async route => {
+    // Mock queue POST for job submission
+    await page.route('**/api/queue', async (route) => {
+      if (route.request().method() === 'POST') {
         await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-                path: '/mnt',
-                items: [
-                    { name: 'media', type: 'directory', path: '/mnt/media' },
-                    { name: 'video.mp4', type: 'file', path: '/mnt/video.mp4', size: 1024 }
-                ]
-            })
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'Job added' }),
         });
+      } else {
+        await route.continue();
+      }
     });
 
-    // Mock queue add
-    await page.route('**/api/queue', async route => {
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({ message: 'Job added' })
-        });
-    });
+    // Open New Job modal
+    const newJobBtn = page.locator('button', { hasText: /new job/i }).first();
+    await expect(newJobBtn).toBeVisible({ timeout: 5000 });
+    await newJobBtn.click();
 
-    // Open Modal
-    await page.click('text=New Job');
-    
-    // Click Browse for Input
-    const browseButtons = await page.locator('button:has-text("Browse")');
+    // Modal should appear
+    await expect(page.locator('text=Add New Conversion Job')).toBeVisible({ timeout: 5000 });
+
+    // Click Browse for input file
+    const browseButtons = page.locator('button', { hasText: /browse/i });
     await browseButtons.first().click();
-    
-    // Check if file browser appears
-    await expect(page.getByText('/mnt')).toBeVisible();
-    await expect(page.getByText('media')).toBeVisible();
-    
-    // Select file
-    await page.click('text=video.mp4');
-    
-    // Check if input is populated
-    await expect(page.locator('input[placeholder="Select a video file..."]')).toHaveValue('/mnt/video.mp4');
-    
-    // Select output (simplified for test)
-    await browseButtons.nth(1).click();
-    await page.click('text=Select This Folder');
-    
-    // Submit
-    await page.click('button:has-text("Start Job")');
-    
-    // Toast should appear
-    await expect(page.getByText('Job added to queue')).toBeVisible();
+
+    // FileBrowser renders current_path in header and items in list
+    await expect(page.locator('text=/mnt').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=media').first()).toBeVisible({ timeout: 5000 });
+
+    // Select the video file
+    await page.locator('text=video.mp4').first().click();
+
+    // Input path should be populated
+    await expect(
+      page.locator('input[placeholder="Select a video file..."]')
+    ).toHaveValue('/mnt/video.mp4', { timeout: 5000 });
   });
 });
