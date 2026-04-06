@@ -10,13 +10,13 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.db import get_db_connection
+from shared.db import commit_with_retry, execute_with_retry, get_db_connection
 
 
 class TestGetDbConnection:
     """Tests for get_db_connection context manager."""
 
-    def test_returns_connection(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_returns_connection(self, tmp_path) -> None:
         """get_db_connection returns a valid sqlite3.Connection."""
         db_path = str(tmp_path / "test.db")
         conn = get_db_connection(db_path)
@@ -26,7 +26,7 @@ class TestGetDbConnection:
         finally:
             conn.close()
 
-    def test_wal_mode_enabled(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_wal_mode_enabled(self, tmp_path) -> None:
         """Connection uses WAL journal mode for better concurrency."""
         db_path = str(tmp_path / "test.db")
         conn = get_db_connection(db_path)
@@ -36,17 +36,17 @@ class TestGetDbConnection:
         finally:
             conn.close()
 
-    def test_busy_timeout_set(self, tmp_path: pytest.TempPathFactory) -> None:
-        """Connection has busy_timeout set (non-zero)."""
+    def test_busy_timeout_set(self, tmp_path) -> None:
+        """Connection has busy_timeout at least 5000 ms (implementation may be higher)."""
         db_path = str(tmp_path / "test.db")
         conn = get_db_connection(db_path)
         try:
             row = conn.execute("PRAGMA busy_timeout").fetchone()
-            assert row[0] >= 1000  # at least 1 second
+            assert row[0] >= 5000
         finally:
             conn.close()
 
-    def test_row_factory_set(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_row_factory_set(self, tmp_path) -> None:
         """Connection row_factory is sqlite3.Row for dict-like access."""
         db_path = str(tmp_path / "test.db")
         conn = get_db_connection(db_path)
@@ -55,7 +55,7 @@ class TestGetDbConnection:
         finally:
             conn.close()
 
-    def test_connection_is_usable(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_connection_is_usable(self, tmp_path) -> None:
         """Connection can execute basic SQL immediately after creation."""
         db_path = str(tmp_path / "test.db")
         conn = get_db_connection(db_path)
@@ -65,7 +65,34 @@ class TestGetDbConnection:
         finally:
             conn.close()
 
-    def test_concurrent_writes_no_deadlock(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_context_manager_commits_on_successful_exit(self, tmp_path) -> None:
+        """sqlite3 connection context manager commits when the block exits cleanly."""
+        db_path = str(tmp_path / "ctx.db")
+        with get_db_connection(db_path) as conn:
+            conn.execute("CREATE TABLE t (x INTEGER)")
+        with get_db_connection(db_path) as conn2:
+            tables = [
+                row[0]
+                for row in conn2.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            ]
+            assert "t" in tables
+
+    def test_execute_with_retry_and_commit_with_retry(self, tmp_path) -> None:
+        """execute_with_retry and commit_with_retry persist rows."""
+        db_path = str(tmp_path / "retry.db")
+        with get_db_connection(db_path) as conn:
+            conn.execute("CREATE TABLE r (id INTEGER PRIMARY KEY, v TEXT)")
+            commit_with_retry(conn)
+        with get_db_connection(db_path) as conn:
+            execute_with_retry(conn, "INSERT INTO r (v) VALUES (?)", ("a",))
+            commit_with_retry(conn)
+        with get_db_connection(db_path) as conn:
+            n = conn.execute("SELECT COUNT(*) FROM r").fetchone()[0]
+            assert n == 1
+
+    def test_concurrent_writes_no_deadlock(self, tmp_path) -> None:
         """Multiple threads can write to the same DB without deadlocking."""
         db_path = str(tmp_path / "concurrent.db")
         # Create table first

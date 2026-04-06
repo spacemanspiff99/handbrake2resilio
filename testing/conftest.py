@@ -88,8 +88,20 @@ def _make_test_config(db_path: str):
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _fast_psutil_cpu_percent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid blocking ``psutil.cpu_percent(interval=1)`` (~1s) in unit tests."""
+    import psutil
+
+    monkeypatch.setattr(
+        psutil,
+        "cpu_percent",
+        lambda *args, **kwargs: 25.0,
+    )
+
+
 @pytest.fixture
-def tmp_db(tmp_path: pytest.TempPathFactory) -> str:
+def tmp_db(tmp_path) -> str:
     """Temporary SQLite database path — isolated per test."""
     return str(tmp_path / "test.db")
 

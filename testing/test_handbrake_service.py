@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -57,17 +57,12 @@ class TestConvertEndpoint:
         )
         assert resp.status_code == 400
 
-    @patch("handbrake_service_simple.subprocess.Popen")
+    @patch("handbrake_service_simple.run_handbrake_conversion")
     @patch("handbrake_service_simple.can_start_job", return_value=True)
     def test_valid_convert_returns_job_id(
-        self, _mock_can, mock_popen, handbrake_client
+        self, _mock_can, _mock_run_conv, handbrake_client
     ) -> None:
-        """Valid input_path under /media/input starts a job and returns job_id."""
-        mock_proc = MagicMock()
-        mock_proc.stdout.readline.return_value = ""
-        mock_proc.poll.return_value = 0
-        mock_popen.return_value = mock_proc
-
+        """Valid input_path under /media/input returns job_id; no real conversion thread."""
         resp = handbrake_client.post(
             "/convert",
             json={
@@ -161,3 +156,30 @@ class TestValidateInputPath:
         from handbrake_service_simple import validate_input_path  # type: ignore[import]
 
         assert validate_input_path(None) is False  # type: ignore[arg-type]
+
+
+class TestSystemUsageAndGating:
+    """Tests for get_system_usage() and can_start_job() in handbrake service."""
+
+    def test_get_system_usage_returns_cpu_and_memory(self) -> None:
+        """get_system_usage returns dict with cpu_percent and memory_percent."""
+        from handbrake_service_simple import get_system_usage  # type: ignore[import]
+
+        usage = get_system_usage()
+        assert isinstance(usage, dict)
+        assert "cpu_percent" in usage
+        assert "memory_percent" in usage
+
+    @patch("handbrake_service_simple.get_system_usage")
+    def test_can_start_job_false_when_cpu_saturated(self, mock_usage) -> None:
+        """can_start_job returns False when CPU usage is above threshold."""
+        mock_usage.return_value = {
+            "cpu_percent": 95.0,
+            "memory_percent": 40.0,
+            "memory_available_gb": 16.0,
+            "disk_percent": 20.0,
+            "disk_free_gb": 50.0,
+        }
+        from handbrake_service_simple import can_start_job  # type: ignore[import]
+
+        assert can_start_job() is False

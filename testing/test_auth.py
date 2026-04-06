@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime, timedelta
 
+import jwt
 import pytest
+from flask import Flask
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "api-gateway"))
@@ -181,8 +184,8 @@ class TestTokens:
         """verify_token() with a tampered token returns None."""
         user_info = auth_service.authenticate_user("admin", "admin123")
         token = auth_service.create_token(user_info)
-        # Flip the last character to corrupt the signature
-        tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
+        # Truncate signature segment so verification must fail
+        tampered = token.rsplit(".", 1)[0] + ".not-a-signature"
         result = auth_service.verify_token(tampered)
         assert result is None
 
@@ -255,3 +258,59 @@ class TestTabCrud:
         tabs = auth_service.get_tabs()
         ids = [t["id"] for t in tabs]
         assert tab_id not in ids
+
+
+class TestPasswordAndTokenEdgeCases:
+    """Password changes, expired JWT, and require_auth decorator."""
+
+    def test_change_password_invalidates_old_credentials(self, auth_service) -> None:
+        """change_password updates hash; old password fails, new works."""
+        user = auth_service.authenticate_user("admin", "admin123")
+        assert user is not None
+        assert auth_service.change_password(
+            user["id"], "admin123", "newpassword999"
+        )
+        assert auth_service.authenticate_user("admin", "newpassword999") is not None
+        assert auth_service.authenticate_user("admin", "admin123") is None
+
+    def test_verify_expired_token_returns_none(self, auth_service) -> None:
+        """verify_token returns None for an expired JWT."""
+        user = auth_service.authenticate_user("admin", "admin123")
+        payload = {
+            "user_id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "exp": datetime.utcnow() - timedelta(hours=1),
+            "iat": datetime.utcnow() - timedelta(hours=2),
+        }
+        token = jwt.encode(
+            payload,
+            auth_service.config.security.jwt_secret_key,
+            algorithm=auth_service.config.security.jwt_algorithm,
+        )
+        assert auth_service.verify_token(token) is None
+
+
+class TestRequireAuthDecorator:
+    """Flask require_auth: 401 without Bearer, 200 with valid token."""
+
+    def test_require_auth_rejects_and_accepts(self, tmp_path) -> None:
+        from auth import AuthService, require_auth  # type: ignore[import]
+
+        db_path = str(tmp_path / "req_auth.db")
+        cfg = _make_config(db_path)
+        app = Flask(__name__)
+        app.auth_service = AuthService(cfg)
+
+        @app.route("/protected")
+        @require_auth
+        def protected():
+            return {"ok": True}
+
+        client = app.test_client()
+        assert client.get("/protected").status_code == 401
+
+        user = app.auth_service.authenticate_user("admin", "admin123")
+        token = app.auth_service.create_token(user)
+        headers = {"Authorization": f"Bearer {token}"}
+        assert client.get("/protected", headers=headers).status_code == 200

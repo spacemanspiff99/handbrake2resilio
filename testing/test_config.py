@@ -135,3 +135,65 @@ class TestConfigLoading:
         cfg = _build_config(str(tmp_path / "test.db"))
         assert "standard" in cfg.video.quality_presets
         assert "high" in cfg.video.quality_presets
+
+    def test_bcrypt_rounds_50_raises_value_error(self) -> None:
+        """BCRYPT_ROUNDS above 16 fails SecurityConfig validation (e.g. 50)."""
+        from shared.config import SecurityConfig
+
+        with pytest.raises(ValueError, match="BCRYPT_ROUNDS"):
+            SecurityConfig(
+                jwt_secret_key="test-secret-key-32chars-minimum!!",
+                bcrypt_rounds=50,
+            )
+
+    def test_validate_system_requirements_true_on_test_machine(
+        self, tmp_path
+    ) -> None:
+        """validate_system_requirements() succeeds with relaxed minimums."""
+        cfg = _build_config(str(tmp_path / "test.db"))
+        cfg.resources.min_memory_gb = 0.01
+        cfg.resources.min_disk_gb = 0.01
+        assert cfg.validate_system_requirements() is True
+
+
+class TestLoadConfigFromEnvironment:
+    """Fresh-process checks for env-driven load_config (avoids cached module)."""
+
+    def test_max_concurrent_jobs_env_var(self, tmp_path) -> None:
+        """MAX_CONCURRENT_JOBS=10 is reflected after load_config in a subprocess."""
+        import subprocess
+
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        db = tmp_path / "subcfg.db"
+        logs = tmp_path / "logs"
+        temp = tmp_path / "temp"
+        up = tmp_path / "up"
+        bk = tmp_path / "bk"
+        for p in (logs, temp, up, bk):
+            p.mkdir(parents=True, exist_ok=True)
+
+        code = f"""
+import os, sys
+sys.path.insert(0, {root!r})
+os.environ["JWT_SECRET_KEY"] = "test-secret-key-32chars-minimum!!"
+os.environ["ENVIRONMENT"] = "development"
+os.environ["DATABASE_PATH"] = {str(db)!r}
+os.environ["LOGS_DIRECTORY"] = {str(logs)!r}
+os.environ["TEMP_DIRECTORY"] = {str(temp)!r}
+os.environ["UPLOAD_DIRECTORY"] = {str(up)!r}
+os.environ["BACKUP_DIRECTORY"] = {str(bk)!r}
+os.environ["MIN_MEMORY_GB"] = "0.01"
+os.environ["MIN_DISK_GB"] = "0.01"
+os.environ["MAX_CONCURRENT_JOBS"] = "10"
+import importlib
+import shared.config as sc
+importlib.reload(sc)
+print(sc.config.resources.max_concurrent_jobs)
+"""
+        out = subprocess.check_output(
+            [sys.executable, "-c", code],
+            text=True,
+            cwd=root,
+            timeout=60,
+        )
+        assert out.strip() == "10"

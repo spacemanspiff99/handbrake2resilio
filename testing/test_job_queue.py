@@ -9,7 +9,9 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.job_queue import ConversionJob, JobStatus, ResourceMonitor
+from unittest.mock import patch
+
+from shared.job_queue import ConversionJob, JobQueue, JobStatus, ResourceMonitor
 
 
 class TestJobStatus:
@@ -148,3 +150,53 @@ class TestResourceMonitor:
             count = monitor.get_optimal_job_count()
         assert isinstance(count, int)
         assert count >= 1
+
+
+class TestJobQueue:
+    """Tests for JobQueue with worker threads disabled."""
+
+    @staticmethod
+    def _fake_config(db_path: str):
+        class FakeResources:
+            cpu_limit_percent = 80
+            memory_limit_percent = 80
+            max_concurrent_jobs = 2
+
+        class FakeStorage:
+            database_path = db_path
+
+        class FakeConfig:
+            resources = FakeResources()
+            storage = FakeStorage()
+
+        return FakeConfig()
+
+    @patch.object(JobQueue, "_start_workers", lambda self: None)
+    def test_init_creates_database_and_queue_status(self, tmp_path) -> None:
+        """JobQueue initializes DB and reports empty queue."""
+        db_path = str(tmp_path / "jq.db")
+        cfg = self._fake_config(db_path)
+        jq = JobQueue(cfg, db_path)
+        try:
+            status = jq.get_queue_status()
+            assert status["queue_size"] == 0
+            assert status["running_jobs"] == 0
+        finally:
+            jq.shutdown()
+
+    @patch.object(JobQueue, "_start_workers", lambda self: None)
+    def test_add_job_increases_queue(self, tmp_path) -> None:
+        """add_job enqueues a ConversionJob."""
+        db_path = str(tmp_path / "jq2.db")
+        cfg = self._fake_config(db_path)
+        jq = JobQueue(cfg, db_path)
+        try:
+            job = ConversionJob(
+                id="jid-1",
+                input_path="/in/a.mp4",
+                output_path="/out/a.mkv",
+            )
+            assert jq.add_job(job) is True
+            assert jq.get_queue_status()["queue_size"] >= 1
+        finally:
+            jq.shutdown()
