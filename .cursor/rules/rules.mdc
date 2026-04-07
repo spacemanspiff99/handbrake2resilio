@@ -80,33 +80,13 @@ alwaysApply: true
 - **`Dockerfile.playwright`** lives at `ui-frontend/Dockerfile.playwright` — do not create it elsewhere.
 - **`USE_LIVE_API=true`** skips the `webServer` launcher in `playwright.config.js` so no dev server is needed on the host.
 - **If Chromium fails to launch inside the container**, check for missing libs with `ldd` inside the container — never ask the user to install packages on the host.
-- **Every Playwright smoke test suite MUST include at least one visual CSS sanity check** — verify a key element has non-default styling (e.g. check computed `backgroundColor` of a button is not transparent/default). "Functional tests pass" does NOT mean "UI looks correct" — styling and functionality are independent axes. Example:
-  ```js
-  const btn = page.locator('button[type="submit"]');
-  const bg = await btn.evaluate(el => getComputedStyle(el).backgroundColor);
-  expect(bg).not.toBe('rgba(0, 0, 0, 0)');
-  ```
-- **Take a full-page screenshot on every smoke test run** and attach it to the test report so a human can visually verify appearance.
+- **Playwright smoke suites MUST include a CSS sanity test** — assert the loaded stylesheet has rules (e.g. `document.styleSheets[0].cssRules.length > 50`) or check CSS bundle file size > 5 KB. Do NOT rely on checking a single element's computed color (fragile). Take a full-page screenshot on every run for human review.
 
 ## Frontend Dockerfile Rules
-- **NEVER use `COPY . .` in a frontend Dockerfile** — always use explicit COPY lines so the build context is predictable and auditable.
-- **When writing explicit COPY lines for a frontend build, ALWAYS audit and copy ALL build-pipeline config files** before `RUN npm run build`:
-  - `tailwind.config.js` and `postcss.config.js` for Tailwind projects
-  - `vite.config.js` / `webpack.config.js` for Vite/Webpack projects
-  - `.babelrc` / `babel.config.js` if present
-  - Any `*.config.js` in the frontend root that `npm run build` depends on
-- **After rebuilding the frontend Docker image, ALWAYS verify CSS bundle size** before declaring success:
-  ```bash
-  docker run --rm [image] find /usr/share/nginx/html/static/css -name "*.css" -exec wc -c {} +
-  # FAIL if output is < 5000 bytes — means Tailwind/PostCSS did not run
-  ```
-- **When refactoring a Dockerfile from `COPY . .` to explicit copies**, list every `*.config.js` in the frontend root and confirm each is included or explicitly excluded with justification.
+- Use explicit COPY lines (never `COPY . .`). Before `RUN npm run build`, copy **every** `*.config.js` in the frontend root (`tailwind.config.js`, `postcss.config.js`, `vite.config.js`, etc.). After building, verify CSS bundle > 5 KB or the build is broken.
 
-## Frontend Visual Acceptance Criteria (Required)
-- **Every prompt or Linear issue that touches `ui-frontend/` — including Dockerfiles, build config, CSS config, or npm dependencies — MUST include this acceptance criterion:**
-  - "UI renders with correct styling: elements have background colors, layout is structured (not raw stacked text), buttons are visually styled"
-  - This check MUST be done in a real browser or via Playwright screenshot — NOT inferred from "page loads without JS errors"
-- **"No JS errors in the console" is NOT a substitute for visual verification.** A completely unstyled app produces zero JS errors. Both checks are required independently.
+## Frontend Visual Acceptance Criteria
+- Any prompt/issue touching `ui-frontend/` MUST include: "UI is visually styled (not raw text)." Verify via browser or Playwright screenshot. "No JS errors" alone is NOT sufficient — an unstyled app has zero JS errors.
 
 ## Magic Patterns UI Integration
 - **Immutable UI Code**: When importing a UI from Magic Patterns, no UI code should be updated unless it has a bug and with explicit permission. Otherwise, use code as is and configure middleware (hooks, utils, or wrappers) to suit the project requirements.
