@@ -6,9 +6,11 @@ WORKDIR /app
 COPY ui-frontend/package.json ui-frontend/package-lock.json ./
 RUN npm ci
 
-# Copy source and build
+# Copy source, public assets, and ALL build-pipeline configs (tailwind, postcss required for CSS)
 COPY ui-frontend/src ./src
 COPY ui-frontend/public ./public
+COPY ui-frontend/tailwind.config.js ./tailwind.config.js
+COPY ui-frontend/postcss.config.js ./postcss.config.js
 
 # Build with optional API URL arg (defaults to empty = use relative paths)
 ARG REACT_APP_API_URL=""
