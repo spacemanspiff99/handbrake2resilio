@@ -29,6 +29,18 @@ test.describe('Smoke Test - Production Verification', () => {
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   });
 
+  test('should have Tailwind CSS loaded (not unstyled)', async ({ page }) => {
+    await page.goto(targetURL);
+    await page.waitForURL('**/login');
+    const ruleCount = await page.evaluate(() => {
+      const sheets = Array.from(document.styleSheets);
+      return sheets.reduce((sum, s) => {
+        try { return sum + s.cssRules.length; } catch { return sum; }
+      }, 0);
+    });
+    expect(ruleCount).toBeGreaterThan(50);
+  });
+
   test('should verify file browser is accessible', async ({ page }) => {
     await page.goto(targetURL);
     await page.waitForURL('**/login');
