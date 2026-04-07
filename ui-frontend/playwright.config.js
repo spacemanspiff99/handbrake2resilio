@@ -21,7 +21,7 @@ module.exports = defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
+  webServer: process.env.USE_LIVE_API === 'true' ? undefined : {
     command: 'npm start',
     url: process.env.BASE_URL || 'http://localhost:3000',
     reuseExistingServer: true,

@@ -197,9 +197,9 @@ def _is_stack_running(url: str) -> bool:
 @pytest.fixture(scope="session")
 def docker_stack():
     """Skip all E2E tests if Docker stack is not running."""
-    api_url = os.environ.get("API_URL", "http://localhost:9080")
-    hb_url = os.environ.get("HB_URL", "http://localhost:9081")
-    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:9474")
+    api_url = os.environ.get("API_URL", "http://localhost:8080")
+    hb_url = os.environ.get("HB_URL", "http://localhost:8081")
+    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:7474")
     if not _is_stack_running(api_url):
         pytest.skip(
             f"Docker stack not running at {api_url} — "
