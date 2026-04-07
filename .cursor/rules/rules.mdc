@@ -73,6 +73,14 @@ alwaysApply: true
 - **Logs First (Debugging)**: ALWAYS analyze logs (server and client) BEFORE analyzing code for logic issues. If necessary logs do not exist, update the code to implement logging that would catch the issue being debugged. NEVER attempt to fix bugs directly from code evaluation alone without log-based verification of the root cause.
 - **No Incremental Updates**: NEVER attempt to update running containers; ALWAYS do full clean rebuilds.
 
+## Playwright / Browser Testing Rules
+- **NEVER install system dependencies on the host** for Playwright or any browser tooling. The host is not a test environment.
+- **ALWAYS run Playwright inside a Docker container** using the official `mcr.microsoft.com/playwright` image (match the `@playwright/test` version in `package.json`).
+- **Standard run command**: `docker build -f ui-frontend/Dockerfile.playwright -t h2r-playwright ui-frontend/ && docker run --rm --network=host -e BASE_URL=http://localhost:7474 -e USE_LIVE_API=true h2r-playwright`
+- **`Dockerfile.playwright`** lives at `ui-frontend/Dockerfile.playwright` — do not create it elsewhere.
+- **`USE_LIVE_API=true`** skips the `webServer` launcher in `playwright.config.js` so no dev server is needed on the host.
+- **If Chromium fails to launch inside the container**, check for missing libs with `ldd` inside the container — never ask the user to install packages on the host.
+
 ## Magic Patterns UI Integration
 - **Immutable UI Code**: When importing a UI from Magic Patterns, no UI code should be updated unless it has a bug and with explicit permission. Otherwise, use code as is and configure middleware (hooks, utils, or wrappers) to suit the project requirements.
 

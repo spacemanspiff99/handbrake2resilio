@@ -1,0 +1,13 @@
+FROM mcr.microsoft.com/playwright:v1.58.1-jammy
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY playwright.config.js ./
+COPY tests ./tests
+COPY public ./public
+COPY src ./src
+
+CMD ["npx", "playwright", "test", "--project=chromium", "--reporter=list"]
