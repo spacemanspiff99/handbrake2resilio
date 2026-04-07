@@ -27,6 +27,7 @@ test.describe('Smoke Test - Production Verification', () => {
 
     await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10000 });
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+    await page.screenshot({ path: 'test-results/post-login.png', fullPage: true });
   });
 
   test('should have Tailwind CSS loaded (not unstyled)', async ({ page }) => {
@@ -39,6 +40,7 @@ test.describe('Smoke Test - Production Verification', () => {
       }, 0);
     });
     expect(ruleCount).toBeGreaterThan(50);
+    await page.screenshot({ path: 'test-results/css-sanity-login.png', fullPage: true });
   });
 
   test('should verify file browser is accessible', async ({ page }) => {
@@ -53,5 +55,6 @@ test.describe('Smoke Test - Production Verification', () => {
     await expect(page.getByText('Add New Conversion Job')).toBeVisible({ timeout: 5000 });
     await page.click('button:has-text("Browse") >> nth=0');
     await expect(page.locator('text=media').or(page.locator('text=mnt')).or(page.locator('text=tmp'))).toBeVisible({ timeout: 10000 });
+    await page.screenshot({ path: 'test-results/file-browser.png', fullPage: true });
   });
 });
