@@ -19,10 +19,10 @@ done
 echo "=== handbrake2resilio E2E Test Runner ==="
 echo "Repo root: $REPO_ROOT"
 
-# Check .env exists
-if [ ! -f "$REPO_ROOT/deployment/.env" ]; then
-  echo "WARNING: deployment/.env not found — copying from .env.example"
-  cp "$REPO_ROOT/deployment/.env.example" "$REPO_ROOT/deployment/.env"
+# Check .env exists at project root
+if [ ! -f "$REPO_ROOT/.env" ]; then
+  echo "WARNING: .env not found — copying from .env.example"
+  cp "$REPO_ROOT/.env.example" "$REPO_ROOT/.env"
 fi
 
 echo ""

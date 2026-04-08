@@ -5,8 +5,8 @@ Convert video files with HandBrakeCLI and sync output to Resilio Sync — manage
 ## Quick Start
 
 ```bash
-cp deployment/.env.example deployment/.env
-# Edit deployment/.env — set JWT_SECRET_KEY and media paths
+cp .env.example .env
+# Edit .env — set JWT_SECRET_KEY and media paths
 docker compose -f deployment/docker-compose.yml up --build
 ```
 
@@ -28,7 +28,7 @@ Open http://localhost:7474 — login with `admin` / `admin123`.
 
 ## Environment Variables
 
-See [`deployment/.env.example`](deployment/.env.example) for all variables.
+See [`.env.example`](.env.example) for all variables.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
