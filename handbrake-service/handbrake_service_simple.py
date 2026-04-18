@@ -315,8 +315,33 @@ def get_all_jobs_from_db():
         return jobs
 
 
-def run_handbrake_conversion(job):
-    """Run HandBrake conversion for a job"""
+def build_handbrake_cmd(job: "ConversionJob") -> list:
+    """Build the HandBrakeCLI command list for a conversion job.
+
+    Uses CRF quality (-q) exclusively — never combined with bitrate (-b).
+    Resolution is parsed from ``job.resolution`` as ``WxH`` and mapped to
+    ``--width W --height H``; omitted entirely when the field is empty so
+    HandBrake preserves source dimensions.
+    """
+    cmd = [
+        "HandBrakeCLI",
+        "-i", job.input_path,
+        "-o", job.output_path,
+        "-q", str(job.quality),
+        "--encoder", "x265",
+        "-B", str(job.audio_bitrate),
+    ]
+
+    if job.resolution and isinstance(job.resolution, str) and job.resolution.strip():
+        parts = job.resolution.strip().split("x")
+        if len(parts) == 2:
+            cmd += ["--width", parts[0], "--height", parts[1]]
+
+    return cmd
+
+
+def run_handbrake_conversion(job: "ConversionJob") -> None:
+    """Run HandBrake conversion for a job, persisting status/progress to the DB."""
     try:
         logger.info(f"Starting conversion for job {job.id}")
 
@@ -333,23 +358,8 @@ def run_handbrake_conversion(job):
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
 
-        # Build HandBrake command
-        cmd = [
-            "HandBrakeCLI",
-            "-i",
-            job.input_path,
-            "-o",
-            job.output_path,
-            "-q",
-            str(job.quality),
-            "-r",
-            job.resolution,
-            "-b",
-            str(job.video_bitrate),
-            "-B",
-            str(job.audio_bitrate),
-            "--json",  # Enable JSON output for progress
-        ]
+        cmd = build_handbrake_cmd(job)
+        logger.debug("HandBrakeCLI command", cmd=cmd)
 
         # Run conversion and store Popen reference for cancellation
         process = subprocess.Popen(
@@ -359,24 +369,14 @@ def run_handbrake_conversion(job):
             if job.id in active_jobs:
                 active_jobs[job.id]["process"] = process
 
-        # Monitor progress
+        # Drain stdout (HandBrake writes plain-text progress lines, not JSON)
         while True:
             output = process.stdout.readline()
             if output == "" and process.poll() is not None:
                 break
-            if output:
-                try:
-                    # Parse JSON progress updates
-                    progress_data = json.loads(output.strip())
-                    if "Progress" in progress_data:
-                        job.progress = progress_data["Progress"]["Progress"] * 100
-                        logger.info(f"Job {job.id} progress: {job.progress:.1f}%")
-                        save_job_to_db(job)
-                except json.JSONDecodeError:
-                    pass  # Skip non-JSON output
 
         # Check result — skip DB update if job was externally cancelled
-        return_code = process.poll()
+        return_code = process.wait()
         with job_lock:
             was_cancelled = job.status == JobStatus.CANCELLED
 
@@ -390,8 +390,9 @@ def run_handbrake_conversion(job):
             job.completed_at = datetime.utcnow()
             logger.info(f"Job {job.id} completed successfully")
         else:
+            stderr_output = process.stderr.read()
             job.status = JobStatus.FAILED
-            job.error_message = f"HandBrake failed with return code {return_code}"
+            job.error_message = f"HandBrake failed (exit {return_code}): {stderr_output[:2000]}"
             logger.error(f"Job {job.id} failed: {job.error_message}")
 
         # Save to database and remove from active tracking

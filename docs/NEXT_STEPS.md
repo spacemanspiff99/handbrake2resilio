@@ -1,5 +1,10 @@
 # HandBrake2Resilio - Next Steps
 
+> **WEA-262 (completed)**: Fixed HandBrakeCLI command flags — removed invalid `-r <resolution>` and
+> `-b <bitrate>` flags (both caused 100% job failure). Resolution is now passed as `--width W --height H`;
+> quality mode (`-q`) is exclusive. See `handbrake-service/handbrake_service_simple.py` →
+> `build_handbrake_cmd()`.
+
 ## 🎉 **Current Status: 5/6 Deployment Readiness Checks Passed**
 
 The HandBrake2Resilio project is **very close to production readiness**. Here's the current status:
