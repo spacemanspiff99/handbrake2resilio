@@ -1,0 +1,198 @@
+---
+description: "DevOps rules — Docker, Terraform, GCloud, CI/CD, disk space, deployment"
+globs: ["**/Dockerfile*", "**/docker-compose*.yml", "deployment/**", ".github/**", "terraform/**", "**/*.sh"]
+alwaysApply: false
+---
+
+## Deployment Permission Gate (HARD GATE)
+
+**NEVER deploy to any environment without explicit user approval.** This applies to both manual deploys and CI/CD pipeline triggers.
+
+- Always present a **deploy plan** before executing:
+  - What will change (files, migrations, env vars)
+  - Which migrations will run
+  - Backup status (verified `pg_dump` / volume snapshot for stateful changes)
+  - Rollback plan (previous image tag, previous migration, `down` SQL)
+- Wait for a clear "go ahead" from the user before running the deploy command.
+- **CI/CD pipelines must include a manual approval gate** — GitHub Actions `environment` protection with required reviewers is the canonical mechanism. Auto-deploy on push is forbidden for production.
+- **Database migrations against a shared environment** require (1) a verified backup and (2) explicit user approval. Present the list of pending migrations first.
+
+## Terraform Safety (HARD GATE)
+
+- **NEVER** run `terraform apply -auto-approve` without first running `terraform plan`.
+- **ALWAYS** wait for user approval before running `terraform apply`.
+- **NEVER** force-unlock Terraform state without investigation.
+- **ALWAYS** provide a summary of planned changes before applying.
+- **Respect state locks** — wait for operations to complete.
+
+### Deployment checklist
+- [ ] Run `terraform plan` and review the full output with the user.
+- [ ] Obtain user approval for the listed changes.
+- [ ] Confirm no active locks exist (`terraform force-unlock` is a last-resort emergency procedure, never routine).
+- [ ] Run `terraform apply` (without `-auto-approve` unless the user has explicitly pre-approved the exact plan).
+- [ ] Verify success via provider outputs.
+- [ ] Document any force-unlock operation (reason, investigation, who approved).
+
+### Emergency `force-unlock` procedure
+If force-unlock is absolutely necessary:
+1. Document the reason for force-unlock.
+2. Investigate why the lock became stuck (another run? crashed process? network partition?).
+3. Notify the user before proceeding.
+4. Use `terraform force-unlock <LOCK_ID>` with extreme caution.
+5. Immediately run `terraform plan` after unlock to verify state consistency.
+
+## Google Cloud Authentication
+
+- When `gcloud` authentication is required, immediately use `gcloud auth login --no-launch-browser`. Do not wait for user instruction — this is a standard workspace requirement.
+
+## Container & Network Security
+
+- **Container**:
+  - Use `security_opt: ["no-new-privileges:true"]` in compose files.
+  - Run as non-root (`USER` directive in Dockerfile, or `user:` in compose).
+  - Use specific image tags (e.g. `node:20.11.1-alpine`), never `latest`.
+  - Set resource limits (`deploy.resources.limits.{cpus,memory}` in compose).
+- **Network**:
+  - Use internal networks for inter-service communication.
+  - Expose only the necessary ports to the host.
+  - Use HTTPS in production (TLS termination at nginx or a managed load balancer).
+- **Data**:
+  - Encrypt sensitive data at rest.
+  - Use secure DB connections (TLS, password auth, least-privilege users).
+  - Clean up sensitive files after deployment (no secrets in image layers).
+
+## Docker Best Practices
+
+- **Do NOT run `docker` commands as `sudo`.** Add your user to the `docker` group instead.
+- **Use multi-stage builds** for compiled assets — never ship build tooling in the runtime image.
+- **No Incremental Updates**: Never attempt to update running containers via `docker cp`, `docker exec`, or manual restarts of a stale image. Always do full clean rebuilds — see § Clean Deployment below.
+
+## Disk Space Management (mandatory before any deploy or data-intensive op)
+
+**Before any deployment or data-intensive operation**:
+
+1. **Check disk space**: `df -h /` and the project volume paths.
+2. **Clean if needed**:
+   - `docker system prune -af --volumes` (only after confirming no running workloads depend on cached images)
+   - Package manager caches (`apt-get clean`, `npm cache clean --force`)
+   - Old logs (`find /var/log -name "*.log.*" -mtime +30 -delete`)
+   - Temp files (`/tmp`, project `tmp/`)
+3. **Alert** if disk usage > 80%.
+4. **Abort** the deploy if disk usage > 85% and cleanup did not reduce it below 80%.
+5. **Fail hard** if disk usage > 90% — do not proceed under any circumstances.
+
+## Clean Deployment Process (mandatory)
+
+**"When in doubt, nuke it and rebuild from scratch."** No stale containers, no cached build issues, reproducible deployments.
+
+1. **Stop & remove** project-specific containers and images:
+   ```bash
+   docker compose -f deployment/docker-compose.yml down --remove-orphans
+   docker rmi $(docker images 'h2r-*' -q) 2>/dev/null || true
+   ```
+2. **Clean** build cache, volumes, and project build files:
+   ```bash
+   docker builder prune -af
+   rm -rf ui-frontend/dist ui-frontend/node_modules/.vite
+   ```
+3. **Kill** lingering processes on target ports (e.g. `7474`, `8080`).
+4. **Rebuild & start**:
+   ```bash
+   docker compose -f deployment/docker-compose.yml up -d --build
+   ```
+5. **Verify**:
+   - Container creation time is newer than the latest source commit time (`git log -1 --format=%ci`).
+   - CSS bundle MD5 matches the one produced by the build (see [frontend.mdc](frontend.mdc) § Frontend Dockerfile).
+
+### CI discipline
+During pre-deploy verification and CI, always use full clean rebuilds. Incremental rebuilds are only acceptable during active local development.
+
+## Post-deploy API Contract Verification (mandatory)
+
+**`HTTP 200` alone is NOT sufficient.** After every deploy, assert the data shape the frontend depends on.
+
+### Canonical check script
+```bash
+BASE_URL="${BASE_URL:-http://localhost:7474}"
+
+# Liveness — process is up
+curl -sf "$BASE_URL/api/v1/health" > /dev/null \
+  || (echo "FAIL: /health unreachable" && exit 1)
+
+# Contract — response body has expected shape
+curl -sf "$BASE_URL/api/v1/jobs" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert 'jobs' in d, f'missing key jobs: {list(d)[:5]}'
+assert isinstance(d['jobs'], list), 'jobs must be a list'
+print(f'contract OK: {len(d[\"jobs\"])} jobs')
+"
+
+# Frontend reachability — nginx/proxy is wired correctly
+curl -sf -o /dev/null -w '%{http_code}\n' "$BASE_URL/" \
+  | grep -q '^200$' \
+  || (echo "FAIL: frontend root not 200" && exit 1)
+```
+
+### Rules
+- If any check fails, the deploy is **not complete** — roll back or fix forward before marking the issue Done.
+- The same contract check must run both in the deploy workflow and in a periodic health cron (if one exists).
+- **Verify through the public/nginx endpoint**, not only the internal container port. A broken nginx `proxy_pass` can return 200 for the SPA while returning 404 for `/api/v1/*`.
+
+## GitHub Actions Workflow Safety
+
+### Before committing a new workflow file
+1. **Validate YAML locally**:
+   ```bash
+   python3 -c "import yaml; yaml.safe_load(open('.github/workflows/your-workflow.yml'))"
+   ```
+2. **Check for non-ASCII characters** (see ASCII rule below):
+   ```bash
+   LC_ALL=C grep -Pn '[^\x00-\x7F]' .github/workflows/your-workflow.yml
+   ```
+3. **Author on a feature branch first** — never write a new workflow file directly on `master`. A YAML parse error on the first push to a repo can create a permanent ghost workflow that intercepts all future push events.
+
+### ASCII-only in workflow files
+GitHub Actions YAML must be strict ASCII. Never use smart quotes, em-dashes, en-dashes, ellipsis, or emoji directly in `.github/workflows/*.yml` — not even in comments or `echo` strings inside `run:` blocks. Use plain hyphens (`-`) and standard ASCII only.
+
+### Deploy concurrency group
+Deploy workflows must include a concurrency block to prevent races:
+```yaml
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+```
+A second push queues behind the first rather than racing or being cancelled mid-deploy. Never remove this block.
+
+### If a ghost workflow appears
+Symptoms: `startup_failure`, 0 jobs run, `path: BuildFailed` in the API response for `/actions/workflows/<id>`.
+
+Recovery:
+1. Confirm no open PRs or stale branches still contain the bad file.
+2. Try `git commit --allow-empty` then repo rename + rename back via `gh api --method PATCH`.
+3. If still broken, file a GitHub Support ticket — **do not delete the repo**.
+
+## Git Integration & Sync-back
+
+- After any `feature → master` merge, verify the remote is in sync: `git fetch --all --prune && git status`.
+- If a long-lived `dev` branch exists, merge `master` back into `dev` immediately after every `dev → master` merge to prevent branch drift.
+
+## Git Security (enforced by commit-time grep)
+
+- **Max 10 MB per file**; max 100 MB per repo.
+- **Never commit** passwords, API keys, tokens, `.env` files, DB dumps, private certificates (`*.pem`, `*.key`, `*.p12`), or build artifacts.
+- Before every commit, grep for:
+  ```bash
+  git diff --cached | grep -iE '(password|api[_-]?key|secret|token|credential)\s*[:=]'
+  ```
+  Any match requires explicit user confirmation (or is a hard stop if it's a real secret).
+
+### Required `.gitignore` patterns
+Archives (`*.zip`, `*.tar.gz`, `*.7z`), media (`*.mp4`, large `*.png/*.jpg`), databases (`*.db`, `*.sqlite*`), logs (`*.log`, `logs/`), build artifacts (`dist/`, `build/`, `target/`), env files (`.env*`), editor files (`.vscode/`, `.idea/`, `*.swp`), OS files (`.DS_Store`, `Thumbs.db`).
+
+## Cross-references (repeated for visibility — frequently skipped)
+
+- **Category-binding for AC**: Issues touching Dockerfiles, deploy, or CI/CD must inline the relevant checklist in their Acceptance Criteria — see [ac.mdc](ac.mdc) § Category-Binding Gate.
+- **HTTP 200 is not sufficient**: After every deploy, assert data shape — see § Post-deploy API Contract Verification above.
+- **Frontend Dockerfile CSS check**: Every frontend Dockerfile must verify CSS bundle >5 KB post-build — see [frontend.mdc](frontend.mdc) § Frontend Dockerfile.
+- **Playwright runs in Docker, not on host** — see [frontend.mdc](frontend.mdc) § Playwright Containerization. Never install system deps on the host for browser testing.

@@ -41,6 +41,6 @@ See [`.env.example`](.env.example) for all variables.
 
 ## Documentation
 
-- [Architecture overview](documentation/MICROSERVICES_ARCHITECTURE.md)
-- [Deployment guide](documentation/DEPLOYMENT_GUIDE.md)
-- [Next steps](documentation/NEXT_STEPS.md)
+- [Architecture overview](docs/MICROSERVICES_ARCHITECTURE.md)
+- [Deployment guide](docs/DEPLOYMENT_GUIDE.md)
+- [Next steps](docs/NEXT_STEPS.md)
