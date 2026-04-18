@@ -1,0 +1,137 @@
+---
+description: "Universal project rules — apply to every file edit; index of scoped rules"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+💣 Print at the start of every issue/prompt so we know rules were loaded.
+
+## Rule Hierarchy
+
+This file applies to **every** edit. Before starting any task, identify which scoped rule(s) apply and load them. When in doubt, load the rule — it is always better to over-load than to miss one.
+
+- [ac.mdc](ac.mdc) — Acceptance Criteria standard (always applied; applies to every Linear issue and prompt)
+- [agents.mdc](agents.mdc) — Agent/prompt lifecycle, STOP protocol, model selection (always applied)
+- [backend.mdc](backend.mdc) — Load when touching `api-gateway/`, `handbrake-service/`, `shared/`, or any `.py`
+- [frontend.mdc](frontend.mdc) — Load when touching anything under `ui-frontend/`
+- [devops.mdc](devops.mdc) — Load when touching `Dockerfile*`, `docker-compose*.yml`, `deployment/`, `.github/`, `terraform/`, or any `.sh`
+
+### When to load [frontend.mdc](frontend.mdc)
+- Editing any file under `ui-frontend/`
+- Writing or modifying React components, hooks, CSS, Vite, Tailwind, or PostCSS config
+- Implementing a UI feature that consumes API data
+- Importing or modifying Magic Patterns components
+- Running any browser verification step (Playwright, screenshot, CSS sanity)
+
+### When to load [backend.mdc](backend.mdc)
+- Editing any file under `api-gateway/`, `handbrake-service/`, or `shared/`
+- Writing Python code (any `.py` file)
+- Creating or modifying a database migration (`.sql` file in `migrations/`)
+- Designing or changing an API endpoint, request schema, or response shape
+- Debugging a server-side error (logs, stack traces, DB queries)
+- Writing or running tests against the API
+
+### When to load [devops.mdc](devops.mdc)
+- Editing any `Dockerfile`, `docker-compose*.yml`, or `.env*` file
+- Editing any file under `deployment/`, `terraform/`, or `.github/`
+- Writing or modifying a shell script (`.sh`)
+- Running `terraform plan`, `terraform apply`, or any `gcloud` command
+- Deploying to any environment
+- Creating or modifying a GitHub Actions workflow (`.github/workflows/*.yml`)
+- Performing a DB backup, restore, or migration on a live environment
+- Checking disk space, pruning Docker resources, or managing server processes
+
+## Personas & Process
+Use personas where appropriate: **product manager, front-end engineer, back-end engineer, full-stack engineer, engineering manager, project manager, QA engineer**. When creating prompts, select relevant ones and iterate between them **in sequence**, not parallel.
+
+- Read documentation before creating prompts or Linear issues and before writing code.
+- Update documentation at the end of each prompt or issue.
+- No documentation may be orphaned: every doc must be referenced (with path) in [README.md](../../README.md) or a rule file.
+- When a mistake pattern is clear during development, recommend an update to the relevant rule file.
+
+## Critical Thinking
+- **Prioritize truth over agreement.** Be a critical partner; analyze assumptions; test reasoning; provide alternate solutions.
+- Correct clearly and explain why when anyone (user or agent) is wrong.
+- Do not claim "ready for production" if it is not.
+
+## Code Quality
+- **DRY and SRP**: No duplicated blocks >3 lines; one clear purpose per function/class; shared logic in reusable helpers; follow project ESLint/Prettier conventions.
+- **Official docs first**: Consult official documentation before implementing any feature or making assumptions (Google Cloud, Mailgun, PostgreSQL, Python libraries, Docker, Kubernetes, Terraform). Do not rely on third-party tutorials or outdated blog posts.
+- **Environment variables**: Use env vars for secrets, host names, ports, and parameters; never hardcode.
+
+## File and Folder Organization
+- **No files in the repo root** — everything in respective folders (exceptions: `README.md`, standard config files like `.gitignore`, `package.json` scope files).
+- **No duplicate folders** — check existing structure before creating new folders. If you find duplicates, report and recommend consolidation.
+- **Pattern**: `[service-name]/[function-name]/`. Tests live in a subfolder (e.g. `[function-name]/unit-tests`). If you produce >5 unrelated files of the same kind (e.g. deployment scripts), group them in a folder (e.g. `deployment/`).
+- **One central `migrations/` folder** for the project — never create additional migration folders.
+- **File versioning**: Use zero-padded versions (`deploy001.sh`, `deploy002.sh`) — never ad-hoc names like `deploy_new.sh`, `deploy_simple.sh`.
+- **Prompts live in** `docs/prompts/`. Completed prompts move to `docs/prompts/completed prompts/` with a `done__` prefix (see [agents.mdc](agents.mdc) § Prompt Lifecycle).
+
+## Security (Git)
+- **Max 10 MB per file**; max 100 MB per repo.
+- **Never commit** passwords, API keys, tokens, credentials, `.env` files, database dumps, or private certificates.
+- Before every commit, grep for secret patterns: `password`, `api_key`, `secret`, `token`, `credential`.
+- If sensitive data is accidentally committed: **stop, notify the user, and await approval** before history rewrite (`git filter-branch` / BFG).
+
+## Linear Project Management
+- **Only touch Linear issues in the `handbrake2resilio` project.** Never modify issues on other projects.
+- **All Linear issues you create must be in the `handbrake2resilio` project.**
+- **When the user reports a bug**: immediately create a Linear issue in `handbrake2resilio` with `priority: 1` (Urgent) or `priority: 2` (High) and a `Bug` label. Confirm the issue URL.
+- **When the user gives a feature idea**: immediately create a Linear issue with `priority: 3` (Normal) and a `Feature` label. Confirm the issue URL.
+- **Trigger phrases** (case-insensitive) that should auto-create a Linear issue:
+  - Bug: "bug", "broken", "not working", "issue with", "error", "crash", "fix", "regression"
+  - Feature: "idea", "recommendation", "suggestion", "we should", "would be nice", "add", "improve", "enhancement", "future"
+- **Don't ask before creating** — just create and report back.
+- **Create subtasks** for all parts of a story (PRs, deploy, docs) so closure really means "done".
+- **Every issue must have acceptance criteria** — see [ac.mdc](ac.mdc).
+- **Every issue must have a recommended LLM model** — see [agents.mdc](agents.mdc) § Model Selection. Before starting an issue, verify the active model matches the recommendation.
+
+## Issue Log
+
+The canonical recurring-bug log lives at [`docs/standards/ISSUE_LOG.md`](../../docs/standards/ISSUE_LOG.md).
+
+### Mandatory agent actions
+- **On closing a bug**: Check whether the bug matches an existing category in `ISSUE_LOG.md`. If yes, add a row (issue ID, date, title, root cause, prevention added). If no, note it in the Open Items section.
+- **On pattern recurrence** (same root cause, 2+ issues): Create a new `## CAT-N` section in the log, back-fill all matching issues, and add a prevention rule to the relevant `.mdc` file in the same PR.
+- **On adding a prevention rule**: Record the rule reference in the `Prevention Added` column of every affected row.
+- **Trigger phrases** that should prompt a log check: "same issue", "again", "regression", "still broken", "also broken", "duplicate".
+
+## Git Branch Strategy
+
+### Branches
+- **`master` / `main`**: Stable, deployable branch. Never push directly; merge via PR.
+- **Feature/fix branches** (e.g. `fix/voice-bug`, `feat/css-sanity`): short-lived, branch from `master`, merged via PR back to `master` after review.
+- **Dev branches** (if used): When on a dev branch, check which branch is active and do not create a new one unless there is a specific need.
+
+### Rules
+- **Default**: Branch from `master`. Merge via PR; never commit directly to `master` for work spanning multiple prompts or >2 domains.
+- **Naming**: `feat/`, `fix/`, `chore/`, `docs/` prefixes. Zero-pad phases: `feat/phase-052-playwright-ci`.
+- **Branch verification**: Run `git branch --show-current` immediately before any `git add` / `git commit` and confirm it matches the intended branch. If it doesn't, unstage with `git restore --staged .`, switch branches, then re-stage.
+- **Never rebuild anything directly — always rebuild the container.** Incremental container updates are forbidden; always do full clean rebuilds (see [devops.mdc](devops.mdc) § Clean Deployment).
+
+## Cross-references — Most-Skipped Rules (repeated here because core.mdc is always loaded)
+
+These rules exist in scoped files but are frequently skipped by agents. They are repeated here as hard reminders.
+
+### 1. Category-Binding Gate ([ac.mdc](ac.mdc) § Category-Binding Gate)
+If an issue touches a domain covered by a CAT in [`docs/standards/ISSUE_LOG.md`](../../docs/standards/ISSUE_LOG.md), its AC **MUST** include the matching prevention checklist from the relevant rule file. An issue that maps to a CAT but omits the checklist is defective. Same rule applies to prompts — see [agents.mdc](agents.mdc) § Category-Aware Prompt Gate.
+
+### 2. HTTP 200 is Not Sufficient ([devops.mdc](devops.mdc) § Post-deploy API Contract Verification)
+After every deploy, assert **data shape**, not just HTTP status. A green health check with a broken response body is a failed deploy.
+
+### 3. CSS Sanity Is Required On Every Frontend Build ([frontend.mdc](frontend.mdc) § CSS Sanity)
+"No JS errors" is NOT sufficient — an unstyled app has zero JS errors. Every Playwright smoke run MUST assert `document.styleSheets[0].cssRules.length > 50` OR that the built CSS bundle is >5 KB, AND take a full-page screenshot for human review.
+
+### 4. Playwright Runs In Docker, Never On Host ([frontend.mdc](frontend.mdc) § Playwright Containerization)
+Never install Playwright system dependencies on the host. Always run tests inside `mcr.microsoft.com/playwright`, using the project's `ui-frontend/Dockerfile.playwright`.
+
+### 5. Frontend Dockerfile Explicit COPY ([frontend.mdc](frontend.mdc) § Frontend Dockerfile)
+Never `COPY . .`. Before `RUN npm run build`, explicitly `COPY` every `*.config.js` (`tailwind.config.js`, `postcss.config.js`, `vite.config.js`). After build, verify the CSS bundle is >5 KB.
+
+### 6. Magic Patterns Is Immutable ([frontend.mdc](frontend.mdc) § Magic Patterns)
+Every Magic Patterns file has `/* MAGIC_PATTERNS_IMMUTABLE */` as its first line and lives in `ui-frontend/src/ui/magic-patterns/`. Never modify one without explicit user permission. Build wrappers, not replacements.
+
+### 7. Deploy Permission Gate ([devops.mdc](devops.mdc) § Deployment Permission Gate)
+**Never deploy to any environment without explicit user approval.** Applies to manual deploys and CI/CD triggers. Present a deploy plan and wait for a clear "go ahead".
+
+💥 Print at the end of every output so we know rules were followed.

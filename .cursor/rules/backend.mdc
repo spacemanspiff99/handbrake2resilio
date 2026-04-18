@@ -1,0 +1,71 @@
+---
+description: "Backend and API rules — Python, API design, migrations, debugging"
+globs: ["api-gateway/**", "handbrake-service/**", "shared/**", "migrations/**", "**/*.py"]
+alwaysApply: false
+---
+
+## Python Standards
+
+- **Always** use type hints on function signatures.
+- **Always** implement proper error handling (no bare `except:`; catch specific exceptions; log or re-raise with context).
+- **Always** write unit tests for new logic.
+- **Always** use meaningful names.
+- **Always** add docstrings to public functions and classes.
+- Follow PEP 8 / project Ruff or Black configuration.
+
+## API Design
+
+- **Official docs first**: Consult official documentation before implementing API endpoints or integrations (FastAPI, Flask, PostgreSQL, Mailgun, Google Cloud, etc.). Never rely on third-party tutorials or outdated blog posts.
+- **Environment variables**: Never hardcode secrets, host names, ports, or parameters. Use `os.environ` with sensible defaults and fail-loud missing-var checks.
+- **Consistent response shapes**: Use a shared helper for success/error envelopes so the frontend can rely on a single contract.
+- **Health endpoints**: `/health` must verify database connectivity, downstream API reachability, and required permissions — not just return `200 OK` blindly. A process being alive is not the same as a service being healthy.
+
+## Database Migrations
+
+- Store `.sql` files **only** in the central `migrations/` folder. Never create other migration folders.
+- Use **versioned, zero-padded** migration file names (e.g. `001_create_jobs.sql`, `002_add_priority_column.sql`).
+- **Test migrations on development data first.** Never apply a migration to a shared/production DB without (1) a verified backup and (2) explicit user approval.
+- **Local isolation**: Unless explicitly requested otherwise, all DB operations target the local Docker DB. Never target production DBs during development/testing.
+- **Seeding scripts** (if any) are local development bootstrap only — never the canonical production source. Production data changes must go through a numbered migration.
+
+## API & Testing Requirements
+
+- **API contract**: Test endpoints with **real data**; verify request/response formats. `200 OK` is not proof of correctness — assert the response body shape.
+- **Health endpoints**: Must check database/API connectivity and permissions, not just process liveness.
+- **E2E testing**: Never claim a feature works without testing the complete user workflow with real data. Status detection must use real files in real directories.
+- **No Incremental Container Updates**: Never attempt to update running containers for testing; always do full clean rebuilds (see [devops.mdc](devops.mdc) § Clean Deployment).
+
+## Debugging
+
+- **Logs first**: Analyze logs (server and client) **before** analyzing code for logic issues. If the needed logs do not exist, update the code to add logging that would catch the issue, then re-run and read the logs. Do not fix bugs from code evaluation alone without log-based verification of the root cause.
+- **Exception**: Trivially obvious bugs (syntax errors, typos, wrong import) may be fixed without log verification.
+
+## API Contract Change Checklist
+
+When adding a new field to a DB schema, renaming an endpoint, changing a status code, or modifying a response envelope:
+
+### Serializer & Response Shape
+- [ ] Add the field to the API serializer / response dict — never leave a DB field unserved.
+- [ ] Verify the field appears in **every** code path that returns the entity (list endpoint, detail endpoint, bulk endpoint). Path parity is missed most often.
+- [ ] Add the corresponding TypeScript type in `ui-frontend/src/types/` (or equivalent).
+- [ ] If a new required key is added, update the post-deploy API contract check in [devops.mdc](devops.mdc) § Post-deploy API Contract Verification.
+
+### Naming & Compatibility
+- [ ] Field names are consistent with existing conventions (snake_case vs camelCase — pick one at the API boundary).
+- [ ] Partial-update (`PATCH`) endpoints handle nullable fields; never require all fields.
+- [ ] Breaking changes are versioned (`/api/v1/` vs `/api/v2/`) or shipped with a deprecation window documented in the PR.
+
+### Consumer Propagation
+Any change to an API response shape must verify **all** downstream consumers:
+- [ ] Frontend components that read the changed field are updated in the same PR.
+- [ ] Cache invalidation is handled if the frontend caches the response.
+- [ ] UI reflects the change after save via optimistic update — not a full refetch (see [frontend.mdc](frontend.mdc) § State Management).
+
+### Cross-reference
+This checklist must be included in issue AC when the issue touches API response shape — see [ac.mdc](ac.mdc) § Category-Binding Gate.
+
+## Cross-references (repeated for visibility)
+
+- **API contract verification** is also enforced in [devops.mdc](devops.mdc) § Post-deploy API Contract Verification — every deploy must assert data shape, not just HTTP 200.
+- **Category-binding for AC** is enforced in [ac.mdc](ac.mdc) § Category-Binding Gate — issues touching API response shape or DB migrations must inline the relevant backend.mdc checklist.
+- **Terraform safety** for infrastructure-touching work — see [devops.mdc](devops.mdc) § Terraform Safety.

@@ -1,44 +1,96 @@
 ---
-alwaysApply: true
----
----
-description: "Agent and prompt design — lifecycle, micro-tasks, model selection"
+description: "Agent and prompt design — lifecycle, micro-tasks, STOP protocol, model selection"
 globs: ["**/*"]
 alwaysApply: true
 ---
 
 ## Prompt Lifecycle & Naming
-1. **Creation**: At the start of each new phase, create a prompt file in `docs/prompts/` (e.g. `PHASE_[N]_[DESCRIPTION].md`) if it does not exist.
-2. **Sequence**: Use naming `PHASE_[N]_[DESCRIPTION].md`.
-3. **Completion**: When all tasks are implemented and verified, rename with `done__` prefix (e.g. `done__PHASE_01_INITIAL_SETUP.md`) and move to `docs/prompts/completed prompts/`.
-4. **Location**: All execution prompts live in `docs/prompts/`.
-5. **Handoff**: Every prompt must end with a "STOP" section naming the next file in the sequence.
-6. **Git**: After completing a prompt (and renaming to `done__`), commit all changes and push to the remote on the current branch.
-7. **Issue-driven work (Linear / fix branches)**: Pushing the feature branch is not the end state. Before marking an issue **Done**: follow merge order and deploy handoff in [README.md](README.md) Branch Strategy and [docs/guides/MULTI_AGENT_RELEASE_PIPELINE.md](docs/guides/MULTI_AGENT_RELEASE_PIPELINE.md) (use **separate sessions** A→B→C for implement, integrate, release). Deploy approval: [devops.mdc](.cursor/rules/devops.mdc). Production does not update until that deploy runs.
-8. Do not run the prompt in the same Cursor conversation that created it — start a fresh chat to reduce context.
+
+1. **Creation**: At the start of each new phase, create a prompt file in `docs/prompts/` (e.g. `PHASE_[N]_[DESCRIPTION].md` or `0001_[DESCRIPTION].md`) if it does not exist. **Always create the prompt before executing** — don't execute ad-hoc in a session (for cost and memory management).
+2. **Sequence**: Use `PHASE_[N]_[DESCRIPTION].md` or a 4-digit sequence `0001_[DESCRIPTION].md`. Pick one convention per sprint and stick with it. Linear issue IDs remain the canonical source of truth.
+3. **Completion**: When **all** tasks are implemented **and verified**, rename with `done__` prefix (e.g. `done__PHASE_01_INITIAL_SETUP.md`) and move to `docs/prompts/completed prompts/`.
+4. **Location**: All execution prompts live in `docs/prompts/`. Never create prompts outside this folder.
+5. **Handoff**: Every prompt must end with a "STOP" section naming the next file in the sequence (and the parallel sibling branch, if any — see STOP Protocol below).
+6. **Git**: After completing a prompt (and renaming to `done__`), commit all changes and push to the remote on the current branch. Run `git branch --show-current` before committing to confirm you're on the intended branch.
+7. **Issue-driven work (Linear / fix branches)**: Pushing the feature branch is **not** the end state. Before marking a Linear issue **Done**:
+   - (a) PR merged to `master`
+   - (b) Deploy executed (with explicit user approval — see [devops.mdc](devops.mdc) § Deployment Permission Gate)
+   - (c) Post-deploy API contract check passes (see [devops.mdc](devops.mdc) § Post-deploy API Contract Verification)
+   - (d) Playwright smoke (including CSS sanity — see [frontend.mdc](frontend.mdc) § CSS Sanity) passes, with screenshot captured
+   - **"Merged to master" ≠ "issue done."** Skipping (b)–(d) is not permitted.
+8. **Fresh chat for execution**: Do not run the prompt in the same Cursor conversation that created it — start a fresh chat to reduce context and cost.
 
 ## Prompt Content
-- **Context**: Every prompt must reference the project rules (e.g. `.cursor/rules/core.mdc` or rules index).
+
+- **Context**: Every prompt must reference [core.mdc](core.mdc) (and any other scoped rule the work touches).
 - **Actionable**: Tasks must be concrete, file-specific, with code snippets where appropriate.
-- **Verification**: Every prompt must include a "Verification" section with specific commands or checks.
-- After completing a project or prompt, use 💥 emoji.
+- **Verification**: Every prompt must include a "Verification" section with specific commands or checks (e.g. `curl`, `docker ps`, `npx playwright test`).
+- **Self-contained**: Prompts must include **all** critical requirements from the source Linear issue — not just a reference link. If the issue specifies Magic Patterns integration, the prompt must include the full 4-step MP process ([frontend.mdc](frontend.mdc) § Magic Patterns). A prompt that says "see WEA-XX for details" without extracting the actionable requirements is **defective**.
+- **AC parity**: The prompt's Verification checklist must cover **every** acceptance criterion from the source issue(s). Missing AC in the prompt = the executing agent will skip them. See [ac.mdc](ac.mdc).
+- **Recommended model**: Every prompt must declare a recommended LLM model (see § Model Selection below). Before starting the prompt, verify the active model matches the recommendation.
+- **Markers**: Print 💣 at the top and 💥 at the end (per [core.mdc](core.mdc) and [ac.mdc](ac.mdc)).
+
+### Category-Aware Prompt Gate (HARD REQUIREMENT)
+
+Before writing a prompt's Verification section, the prompt author **MUST** check whether the work touches any of the known bug categories in [`docs/standards/ISSUE_LOG.md`](../../docs/standards/ISSUE_LOG.md). If it does, the prompt **MUST** inline the matching prevention checklist from the relevant rule file into the Verification section. A prompt that touches a known category but omits the checklist is **defective**.
+
+The Category-Binding Gate table lives in [ac.mdc](ac.mdc) § Category-Binding Gate — the same gate applies to both issues and prompts. The executing agent follows the prompt literally; if the checklist is missing from the prompt, it will be skipped.
+
+## STOP Protocol
+
+Every executing agent must run these steps before closing the chat:
+
+1. **Open your PR** (if the phase requires one) — this is the completion signal.
+2. **Read the sprint master** (e.g. `docs/prompts/PHASE_<N>_SPRINT_MASTER.md`) to find your phase row and identify the next prompt in the sequence.
+3. **Check for a parallel sibling** (the `Parallel?` column in the Phase Summary table):
+   - **No sibling** (`—`): output the next prompt name and model, done.
+   - **Has sibling**: run the sibling PR check:
+     ```bash
+     gh pr list --repo spacemanspiff99/handbrake2resilio \
+       --head <sibling-branch> --state open \
+       --json number --jq '.[0].number'
+     ```
+   - **PR number returned** → sibling is done. Output:
+     > ✅ ALL PARALLEL PHASES COMPLETE — start `<next-prompt>` in a fresh chat using **<model>**.
+   - **Empty result** → sibling still running. Output:
+     > ⏸ HOLDING — this phase is done (PR #NN open). `<sibling-branch>` has no PR yet.
+     > When that PR opens, start `<next-prompt>` in a fresh chat using **<model>**.
+
+**Why `gh pr list` and not a file check?** Parallel agents run on separate branches and cannot see each other's local file changes. A GitHub PR is the only shared, branch-independent completion signal.
 
 ## Micro-Task Principle
-- **One agent = one domain + one binary success condition.** Do not mix backend, frontend, and DevOps in a single agent invocation.
+
+**One agent = one domain + one binary success condition.** Do not mix backend, frontend, and DevOps in a single agent invocation.
 
 ## Task Sizing
-- **Max 3 tasks per agent.** One verifiable exit condition per agent (single shell command or browser check, pass/fail). **Domain isolation**: Each agent touches one file tree (e.g. `api/` OR `frontend/`, not both).
+
+- **Max 3 tasks per agent.**
+- **One verifiable exit condition per agent** — a single shell command or browser check that returns pass/fail.
+- **Domain isolation**: Each agent touches one file tree (e.g. `api-gateway/` OR `ui-frontend/`, not both).
 
 ## Parallelism & Dependency
-- Independent agents (different file trees, no shared output) run in parallel. Document dependency order: e.g. backend/frontend fix agents → build/integration → deploy + browser test → documentation.
+
+Independent agents (different file trees, no shared output) run in parallel. Document dependency order, e.g.:
+
+```
+backend fix agent + frontend fix agent (parallel)
+  → build/integration agent
+    → deploy + browser test agent
+      → documentation update agent
+```
 
 ## Micro-Task File Naming
-When a phase is split into micro-tasks, use sub-letter suffixes: `PHASE_47A_BACKEND_FIX.md`, `PHASE_47B_FRONTEND_ARCHIVE.md`, etc. Each sub-file follows the same lifecycle (created → executed → `done__` → moved to completed prompts).
 
-## Automated release + multi-session discipline
-- **Automation**: Let CI run lint/build/test on every PR; use GitHub **environment protection** for production deploy approval (see [docs/guides/MULTI_AGENT_RELEASE_PIPELINE.md](docs/guides/MULTI_AGENT_RELEASE_PIPELINE.md)).
-- **Sessions**: Do not implement, merge to `master`, and handle deploy in one chat. Use **three fresh chats** with pasted briefs: **A** implement + PR to `dev`, **B** merge to `dev` and verify, **C** `dev` → `master` + deploy approval + prod verification. Full templates live in that guide.
-- **Why**: Prevents context bleed (e.g. ticket closed while prod unchanged) and keeps each agent within [Micro-Task Principle](#micro-task-principle) boundaries.
+When a phase is split into micro-tasks, use sub-letter suffixes: `PHASE_47A_BACKEND_FIX.md`, `PHASE_47B_FRONTEND_ARCHIVE.md`, etc. Each sub-file follows the same lifecycle (created → executed → `done__` → moved to `completed prompts/`).
+
+## Automated Release + Multi-Session Discipline
+
+- **Automation**: Let CI run lint/build/test on every PR; use GitHub **environment protection** with required reviewers for production deploy approval (see [devops.mdc](devops.mdc) § GitHub Actions Workflow Safety).
+- **Sessions**: Do not implement, merge to `master`, and handle deploy in one chat. Use **three fresh chats** with pasted briefs:
+  - **Session A** — implement + open PR
+  - **Session B** — review CI, merge PR, verify integration
+  - **Session C** — deploy approval + post-deploy verification (API contract + Playwright + screenshot)
+- **Why**: Prevents context bleed (e.g. ticket closed while production unchanged) and keeps each agent within the [Micro-Task Principle](#micro-task-principle).
 
 ## Model Selection
 
@@ -48,7 +100,7 @@ Cursor has **two usage pools** — pick the right one to avoid burning API credi
 2. **API pool** — $20/mo on Pro ($70 on Pro+). Charged at each model's per-token rate. Reserve for tasks that specifically need a non-Composer model.
 
 ### Default: Composer 2 or Auto (Composer pool — no API cost)
-Use **Composer 2** (Cursor's fine-tuned model, $0.50/$2.50 per 1M tokens from the generous pool) or **Auto** for all routine work. Composer 2 outperforms Claude Opus 4.6 on coding benchmarks (61.7% vs 58.0% Terminal-Bench 2.0) at a fraction of the cost, and it draws from the separate generous pool — not your $20 API credits.
+Use **Composer 2** or **Auto** for all routine work. Composer 2 outperforms Claude Opus 4.6 on coding benchmarks (61.7% vs 58.0% Terminal-Bench 2.0) at a fraction of the cost, and it draws from the separate generous pool — not your $20 API credits.
 
 ### When you need a specific API-pool model
 
@@ -83,3 +135,11 @@ When spawning subagents via the Task tool, use `model: "fast"` for narrow, well-
 - **Never use Claude 4.6 Opus as a default.** It costs 10× more than Composer 2 per output token and draws from the limited API pool.
 - **Two-model strategy**: Use Composer 2 for execution (most tokens), escalate to a premium model only for planning/architecture decisions where reasoning quality matters.
 - **Turn off on-demand usage** in Cursor billing settings to cap spend at your plan limit.
+- **Before starting any issue**: verify the active model matches the `Recommended model` declared in the prompt.
+
+## Cross-references (repeated for visibility — frequently skipped by prompt authors)
+
+- **Category-binding in AC**: Every issue must inline the matching CAT checklist in its Acceptance Criteria — see [ac.mdc](ac.mdc) § Category-Binding Gate.
+- **Magic Patterns instructions must be inlined**: A prompt that says "see issue for MP reference" is defective. The full 4-step MP process must appear in the prompt — see [frontend.mdc](frontend.mdc) § Magic Patterns.
+- **"Merged to master" ≠ done**: Deploy + API contract check + Playwright CSS sanity must all pass before marking an issue Done — see § Prompt Lifecycle Completion above.
+- **Playwright runs in Docker**, not on the host — see [frontend.mdc](frontend.mdc) § Playwright Containerization.

@@ -1,0 +1,85 @@
+---
+alwaysApply: true
+---
+---
+description: "Agent and prompt design — lifecycle, micro-tasks, model selection"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+## Prompt Lifecycle & Naming
+1. **Creation**: At the start of each new phase, create a prompt file in `docs/prompts/` (e.g. `PHASE_[N]_[DESCRIPTION].md`) if it does not exist.
+2. **Sequence**: Use naming `PHASE_[N]_[DESCRIPTION].md`.
+3. **Completion**: When all tasks are implemented and verified, rename with `done__` prefix (e.g. `done__PHASE_01_INITIAL_SETUP.md`) and move to `docs/prompts/completed prompts/`.
+4. **Location**: All execution prompts live in `docs/prompts/`.
+5. **Handoff**: Every prompt must end with a "STOP" section naming the next file in the sequence.
+6. **Git**: After completing a prompt (and renaming to `done__`), commit all changes and push to the remote on the current branch.
+7. **Issue-driven work (Linear / fix branches)**: Pushing the feature branch is not the end state. Before marking an issue **Done**: follow merge order and deploy handoff in [README.md](README.md) Branch Strategy and [docs/guides/MULTI_AGENT_RELEASE_PIPELINE.md](docs/guides/MULTI_AGENT_RELEASE_PIPELINE.md) (use **separate sessions** A→B→C for implement, integrate, release). Deploy approval: [devops.mdc](.cursor/rules/devops.mdc). Production does not update until that deploy runs.
+8. Do not run the prompt in the same Cursor conversation that created it — start a fresh chat to reduce context.
+
+## Prompt Content
+- **Context**: Every prompt must reference the project rules (e.g. `.cursor/rules/core.mdc` or rules index).
+- **Actionable**: Tasks must be concrete, file-specific, with code snippets where appropriate.
+- **Verification**: Every prompt must include a "Verification" section with specific commands or checks.
+- After completing a project or prompt, use 💥 emoji.
+
+## Micro-Task Principle
+- **One agent = one domain + one binary success condition.** Do not mix backend, frontend, and DevOps in a single agent invocation.
+
+## Task Sizing
+- **Max 3 tasks per agent.** One verifiable exit condition per agent (single shell command or browser check, pass/fail). **Domain isolation**: Each agent touches one file tree (e.g. `api/` OR `frontend/`, not both).
+
+## Parallelism & Dependency
+- Independent agents (different file trees, no shared output) run in parallel. Document dependency order: e.g. backend/frontend fix agents → build/integration → deploy + browser test → documentation.
+
+## Micro-Task File Naming
+When a phase is split into micro-tasks, use sub-letter suffixes: `PHASE_47A_BACKEND_FIX.md`, `PHASE_47B_FRONTEND_ARCHIVE.md`, etc. Each sub-file follows the same lifecycle (created → executed → `done__` → moved to completed prompts).
+
+## Automated release + multi-session discipline
+- **Automation**: Let CI run lint/build/test on every PR; use GitHub **environment protection** for production deploy approval (see [docs/guides/MULTI_AGENT_RELEASE_PIPELINE.md](docs/guides/MULTI_AGENT_RELEASE_PIPELINE.md)).
+- **Sessions**: Do not implement, merge to `master`, and handle deploy in one chat. Use **three fresh chats** with pasted briefs: **A** implement + PR to `dev`, **B** merge to `dev` and verify, **C** `dev` → `master` + deploy approval + prod verification. Full templates live in that guide.
+- **Why**: Prevents context bleed (e.g. ticket closed while prod unchanged) and keeps each agent within [Micro-Task Principle](#micro-task-principle) boundaries.
+
+## Model Selection
+
+Cursor has **two usage pools** — pick the right one to avoid burning API credits:
+
+1. **Auto + Composer pool** — generous included usage, resets monthly, does NOT draw from the $20 API credit. **Use this for 90%+ of work.**
+2. **API pool** — $20/mo on Pro ($70 on Pro+). Charged at each model's per-token rate. Reserve for tasks that specifically need a non-Composer model.
+
+### Default: Composer 2 or Auto (Composer pool — no API cost)
+Use **Composer 2** (Cursor's fine-tuned model, $0.50/$2.50 per 1M tokens from the generous pool) or **Auto** for all routine work. Composer 2 outperforms Claude Opus 4.6 on coding benchmarks (61.7% vs 58.0% Terminal-Bench 2.0) at a fraction of the cost, and it draws from the separate generous pool — not your $20 API credits.
+
+### When you need a specific API-pool model
+
+| Tier | Model | Input/1M | Output/1M | Use when |
+|------|-------|----------|-----------|----------|
+| **Budget** | GPT-5.4 Nano | $0.20 | $1.25 | Trivial edits, boilerplate generation |
+| **Budget** | GPT-5.1 Codex Mini | $0.25 | $2.00 | Simple agentic coding tasks, 4× rate limits |
+| **Budget** | Gemini 2.5 Flash | $0.30 | $2.50 | Best quality-per-dollar budget model |
+| **Mid** | GPT-5.4 Mini | $0.75 | $4.50 | Moderate complexity, good reasoning |
+| **Mid** | Claude 4.5 Haiku | $1.00 | $5.00 | Strong Anthropic reasoning at budget price |
+| **Premium** | Gemini 3.1 Pro | $2.00 | $12.00 | Complex tasks, cheaper than Sonnet |
+| **Premium** | Claude 4.6 Sonnet | $3.00 | $15.00 | Browser testing, cross-domain architecture |
+| **Ultra** | Claude 4.6 Opus | $5.00 | $25.00 | Hardest architectural problems only |
+
+### Agent-type mapping
+
+| Agent type | Model | Reason |
+|------------|-------|--------|
+| File edits, migrations, archiving | **Composer 2 / Auto** | Generous pool, no API cost |
+| Build checks, shell-only tasks | **Composer 2 / Auto** | Simple pass/fail, no API cost |
+| Documentation updates | **Composer 2 / Auto** | Text only, low risk, no API cost |
+| Multi-file backend/frontend fix | **Composer 2 / Auto** | Strong coding performance, no API cost |
+| High-volume execution (many tokens) | **Gemini 2.5 Flash** | Cheapest quality API model ($0.30/$2.50) |
+| Deploy + browser test (needs MCP) | **Claude 4.6 Sonnet** | Browser tool needs strong reasoning |
+| Complex cross-domain architecture | **Gemini 3.1 Pro** or **Claude 4.6 Sonnet** | Deep reasoning, still cost-conscious |
+| Hardest problems / last resort | **Claude 4.6 Opus** | Only when other models fail ($5/$25) |
+
+### Subagent model (`Task` tool)
+When spawning subagents via the Task tool, use `model: "fast"` for narrow, well-scoped tasks (file edits, shell commands, simple searches). Only omit the model parameter (inheriting the parent's model) when the subtask requires deeper reasoning.
+
+### Cost discipline
+- **Never use Claude 4.6 Opus as a default.** It costs 10× more than Composer 2 per output token and draws from the limited API pool.
+- **Two-model strategy**: Use Composer 2 for execution (most tokens), escalate to a premium model only for planning/architecture decisions where reasoning quality matters.
+- **Turn off on-demand usage** in Cursor billing settings to cap spend at your plan limit.

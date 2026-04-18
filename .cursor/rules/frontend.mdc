@@ -1,0 +1,183 @@
+---
+description: "Frontend rules — Playwright-in-Docker, CSS sanity, Magic Patterns, API-UI contract"
+globs: ["ui-frontend/**"]
+alwaysApply: false
+---
+
+## Browser Verification
+
+When editing or modifying the frontend, **always** use a browser simulation tool (Playwright). Never assume the frontend works without testing.
+
+**Objective exit conditions only.** Never use subjective checks like "charts look correct" or "UI renders nicely" — take a screenshot AND assert specific DOM content, network response keys, or CSS state. Synthetic or partial data can fool visual-only checks.
+
+## CSS Sanity (CAT-F1 — HARD GATE on every frontend build)
+
+"No JS errors" is **not sufficient** — an unstyled app has zero JS errors. Every frontend smoke run MUST assert all three:
+
+- [ ] **CSS rules loaded**: `document.styleSheets[0].cssRules.length > 50` (or equivalent per-stylesheet count)
+- [ ] **CSS bundle size**: The built CSS file at `ui-frontend/dist/assets/*.css` is **>5 KB**
+- [ ] **Full-page screenshot**: Captured on every run and archived for human review
+
+Do NOT rely on checking a single element's computed color — `getComputedStyle(el).color` is fragile and gives false positives when Tailwind tree-shakes aggressively or a stylesheet fails to load.
+
+### Why these three checks
+- A broken build can emit a CSS file that parses but contains only `:root { --x: 0; }` (< 1 KB). The bundle-size check catches that.
+- A successful build can still fail to load at runtime due to CORS, 404, or MIME-type issues. The `cssRules.length` check catches that.
+- Both checks can pass while the layout is still broken (wrong Tailwind config, missing class safelist). The screenshot catches that.
+
+## Playwright Containerization (HARD GATE)
+
+**NEVER install Playwright or any browser tooling system dependencies on the host.** The host is not a test environment.
+
+**ALWAYS run Playwright inside a Docker container** using the official `mcr.microsoft.com/playwright` image. The image version must match the `@playwright/test` version in `ui-frontend/package.json`.
+
+### Standard run command
+```bash
+docker build -f ui-frontend/Dockerfile.playwright -t h2r-playwright ui-frontend/ \
+  && docker run --rm --network=host \
+       -e BASE_URL=http://localhost:7474 \
+       -e USE_LIVE_API=true \
+       h2r-playwright
+```
+
+### File location rules
+- **`Dockerfile.playwright`** lives at `ui-frontend/Dockerfile.playwright` — do not create it elsewhere.
+- **`USE_LIVE_API=true`** skips the `webServer` launcher in `playwright.config.js` so no dev server is needed on the host.
+- Playwright reports land in `ui-frontend/playwright-report/` and `ui-frontend/test-results/`.
+
+### If Chromium fails to launch inside the container
+Check for missing libs **inside the container**:
+```bash
+docker run --rm --entrypoint bash h2r-playwright -c "ldd $(which chromium || which chrome) | grep 'not found'"
+```
+**Never ask the user to install packages on the host.** Fix the Dockerfile instead.
+
+### Playwright config — two configs max
+Keep configs lean. The project has:
+- `ui-frontend/playwright.config.js` — default (starts a dev server if `USE_LIVE_API` is unset)
+
+If you need to test against an already-running instance (CI, UAT), add a **second** config `playwright.config.e2e.js` that supports a `PLAYWRIGHT_BASE_URL` env var. **Never create a third config** — extend one of the two instead.
+
+### Smoke suite MUST include
+- [ ] CSS sanity assertion (see § CSS Sanity above)
+- [ ] Full-page screenshot of the landing page
+- [ ] At least one `data-testid`-based interaction (see § Selector Stability below)
+
+## Frontend Dockerfile (CAT-F2 — HARD GATE)
+
+Every frontend Dockerfile (production and Playwright) MUST follow these rules:
+
+### Explicit `COPY`, never `COPY . .`
+```dockerfile
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY tailwind.config.js ./
+COPY postcss.config.js ./
+COPY vite.config.js ./
+COPY index.html ./
+COPY src/ ./src/
+COPY public/ ./public/
+
+RUN npm run build
+```
+
+### Required config files before `RUN npm run build`
+Copy **every** `*.config.js` in the frontend root before the build step. Missing any of these silently breaks CSS generation:
+- `tailwind.config.js`
+- `postcss.config.js`
+- `vite.config.js`
+- Any other `*.config.{js,ts,cjs,mjs}` in the frontend root
+
+### Post-build verification
+```dockerfile
+RUN test "$(stat -c%s dist/assets/*.css)" -gt 5000 \
+    || (echo "CSS bundle <5KB — build is broken" && exit 1)
+```
+If the CSS bundle is ≤ 5 KB, the build is broken — **fail the image**, do not ship.
+
+### Why
+A frontend that builds without errors but ships a 600-byte CSS file will load, run JavaScript, produce zero console errors, and render as raw unstyled HTML. This has happened before — the Dockerfile rules are the safety net.
+
+## Frontend Visual Acceptance Criterion (mandatory on every `ui-frontend/` issue)
+
+Every prompt or issue that touches `ui-frontend/` MUST include, verbatim:
+
+> - [ ] UI is visually styled (not raw text). Verified via Playwright screenshot AND CSS sanity assertion (`document.styleSheets[0].cssRules.length > 50` or built CSS bundle >5 KB).
+
+"No JS errors" alone is NOT sufficient — see § CSS Sanity above.
+
+## API-UI Key Contract
+
+For any UI that renders API data: before a frontend phase is marked complete, verify via the browser Network tab (or `curl`) that **every** data key the component uses is present and non-null in the API response. `HTTP 200` alone is not sufficient.
+
+### Exit condition pattern
+```bash
+curl -sf http://localhost:7474/api/v1/jobs | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert 'jobs' in d, f'missing key jobs: {list(d)[:5]}'
+assert isinstance(d['jobs'], list), 'jobs must be a list'
+for job in d['jobs']:
+    for required in ('id', 'status', 'created_at'):
+        assert required in job, f'job missing {required}: {list(job)[:5]}'
+print(f'contract OK: {len(d[\"jobs\"])} jobs')
+"
+```
+
+**Post-deploy**: the same key contract must be verified by the deploy workflow — see [devops.mdc](devops.mdc) § Post-deploy API Contract Verification.
+
+## Magic Patterns UI (HARD GATE)
+
+### Core Rules
+- **Directory**: All Magic Patterns imports live in `ui-frontend/src/ui/magic-patterns/`. Do not modify any file in that path without explicit user instruction per request.
+- **File marker**: Every Magic Patterns file has `/* MAGIC_PATTERNS_IMMUTABLE */` as its first line. Treat any file with this marker as **read-only** unless the user explicitly says "you may edit this Magic Patterns file."
+- **Middleware, not modification**: Project-specific adaptations go in hooks, utils, or wrappers **outside** `magic-patterns/`.
+- **Placeholder audit (mandatory)**: When importing a Magic Patterns UI, audit and list every hardcoded placeholder (e.g. `COMMON_LOCATIONS`, mock lists, fake chart data). Replace each with a real API/DB source before the phase is complete; document the audit in the phase prompt.
+
+### Pre-Implementation Gate (BEFORE creating new page/component files)
+When a Linear issue or phase prompt references a Magic Patterns design URL:
+
+1. **Retrieve the design first.** Open the MP URL and export the component code before writing any custom components.
+2. **Place MP files immediately.** Create `ui-frontend/src/ui/magic-patterns/` (if absent) and save the MP export there with `/* MAGIC_PATTERNS_IMMUTABLE */` as the first line.
+3. **Build wrappers, not replacements.** Page components (`ui-frontend/src/pages/`) and display components (`ui-frontend/src/components/`) must **import from** `../ui/magic-patterns/` — never re-implement the MP design from scratch.
+4. **Never skip MP for convenience.** If the MP design doesn't fit, flag it to the user before proceeding — do not silently replace it with custom code.
+
+### Prompt Authoring Rule (for agents creating phase prompts)
+When a Linear issue references a Magic Patterns design, the execution prompt **MUST**:
+- Include the full MP URL in the task description
+- List `ui-frontend/src/ui/magic-patterns/` as a file to create/verify
+- Include the 4-step MP process (import, stamp, wrapper, audit) as explicit numbered tasks
+- Include at least one MP compliance item in the Verification checklist
+- **A single line like "see issue for MP reference" is NOT sufficient.** The prompt must be self-contained.
+
+### Done-Definition for Frontend Feature Issues
+Before marking a frontend feature issue as **Done**, the closing agent MUST verify:
+- [ ] If the issue references a Magic Patterns design: `ui-frontend/src/ui/magic-patterns/` exists and contains the relevant MP files
+- [ ] Each MP file's first line is `/* MAGIC_PATTERNS_IMMUTABLE */`
+- [ ] Page/component files import from `magic-patterns/`, not re-implement the design
+- [ ] Placeholder audit is documented (no hardcoded mock data remains)
+- [ ] All acceptance criteria from the issue are individually checked — not assumed
+
+## Selector Stability (`data-testid`)
+
+Recurring failure mode: DOM structure changes break Playwright selectors, causing mass E2E failures. This happens because selectors are written against implementation details (class names, nesting depth) instead of stable test identifiers.
+
+### Rules
+- **Every interactive element and data-display region must have a `data-testid` attribute.** Job lists, status badges, action buttons, modals, and table rows must all be addressable by `data-testid`.
+- **Playwright tests must use `data-testid` selectors** — never CSS class names, tag nesting, or `:nth-child` selectors that break on re-renders.
+- **Any PR that changes the DOM structure of a tested screen must update the corresponding Playwright selectors in the same PR.**
+- **Selector audit on new pages**: when creating a new page or component, add `data-testid` attributes during initial implementation — do not defer to a follow-up issue.
+
+## State Management
+
+- **Optimistic updates for toggles**: Operations like Active/Inactive toggles must apply an optimistic local state update and call the API in the background. Only refetch the full list on error.
+- **Never call `load()` unconditionally** after a toggle or single-item save — full-list refetches cause page flashes and lost scroll positions.
+- **Server is the source of truth** for existence/uniqueness checks — never validate client-side before the server response.
+
+## Cross-references (repeated for visibility)
+
+- **Category-binding for AC**: Issues touching CSS, Dockerfile, or Magic Patterns must inline the relevant checklist in their Acceptance Criteria — see [ac.mdc](ac.mdc) § Category-Binding Gate.
+- **API-UI Key Contract**: HTTP 200 is not sufficient. Verify every data key in the Network tab. Also enforced post-deploy in [devops.mdc](devops.mdc) § Post-deploy API Contract Verification.
+- **Magic Patterns Pre-Implementation Gate**: Never re-implement MP components from scratch. Retrieve the design first, place files in `magic-patterns/`, build wrappers. A prompt that drops MP instructions is defective.
+- **Playwright runs in Docker, never on host** — see § Playwright Containerization above. This is non-negotiable.

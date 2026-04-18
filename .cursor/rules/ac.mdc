@@ -1,0 +1,133 @@
+---
+description: "Acceptance Criteria standard — every Linear issue and prompt must include testable AC"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Acceptance Criteria Standard
+
+Every issue and prompt must include acceptance criteria that clearly prove it is complete. Acceptance criteria define the observable conditions that must be true for the work to be considered done.
+
+Acceptance criteria must be:
+- Specific
+- Testable
+- Observable
+- Relevant to the issue scope
+- Written in plain language
+- Focused on outcomes rather than implementation steps
+- Include a documentation-update criterion if the change affects any documented behavior (per [core.mdc](core.mdc))
+
+Acceptance criteria should:
+- Cover the main success path
+- Cover relevant error handling
+- Cover important edge cases when applicable
+- Include non-functional requirements only when relevant (performance, security, accessibility, logging, auditability)
+
+Acceptance criteria must **not** be:
+- Vague
+- Process-oriented
+- Implementation instructions
+- Definitions of Done such as "code reviewed" or "tests added"
+
+---
+
+# Core Rule
+
+Every issue and every prompt must include an `## Acceptance Criteria` section.
+
+That section must contain criteria that allow a reviewer, tester, or stakeholder to determine completion with a clear pass/fail result.
+
+If the criteria do not make completion objectively verifiable, the issue or prompt is **not ready for implementation or review**.
+
+---
+
+# Category-Binding Gate (HARD REQUIREMENT)
+
+If an issue touches a domain covered by a known bug category in [`docs/standards/ISSUE_LOG.md`](../../docs/standards/ISSUE_LOG.md), its acceptance criteria **MUST** include the matching prevention checklist from the relevant `.mdc` rule file. This is not optional — an issue that maps to a CAT but omits the checklist is **defective and not ready for implementation**.
+
+| If the issue touches... | Include checklist from... |
+|---|---|
+| Frontend build / CSS / styling | [frontend.mdc](frontend.mdc) § CSS Sanity + § Frontend Dockerfile |
+| Playwright / browser testing | [frontend.mdc](frontend.mdc) § Playwright Containerization + § Selector Stability |
+| Magic Patterns UI | [frontend.mdc](frontend.mdc) § Magic Patterns |
+| API response shape / new field | [backend.mdc](backend.mdc) § API Contract Change Checklist |
+| Deploy / Dockerfile / compose / CI/CD | [devops.mdc](devops.mdc) § Deployment Permission Gate + § Post-deploy API Contract Verification |
+| Terraform / gcloud / infrastructure | [devops.mdc](devops.mdc) § Terraform Safety |
+| Database migration | [backend.mdc](backend.mdc) § Database Migrations |
+
+**How to apply**: Copy the relevant checklist items into the issue's `## Acceptance Criteria` section as explicit pass/fail criteria. Do not just reference the rule — **inline** the checks so the implementing agent cannot skip them.
+
+**On issue close**: Update [`docs/standards/ISSUE_LOG.md`](../../docs/standards/ISSUE_LOG.md) with the issue row and `Prevention Added` column if the bug matches an existing category. See [core.mdc](core.mdc) § Issue Log.
+
+---
+
+# Mandatory Frontend Visual AC
+
+**Any issue or prompt that touches `ui-frontend/` MUST include, verbatim, this acceptance criterion:**
+
+> - [ ] UI is visually styled (not raw text). Verified via Playwright screenshot AND CSS sanity assertion (`document.styleSheets[0].cssRules.length > 50` or built CSS bundle >5 KB).
+
+"No JS errors" alone is **not sufficient** — an unstyled app has zero JS errors. See [frontend.mdc](frontend.mdc) § CSS Sanity.
+
+---
+
+# Writing Standard
+
+## What good acceptance criteria look like
+
+Good acceptance criteria:
+- Describe the expected result
+- Use measurable or observable language
+- Avoid ambiguity
+- Stay within the scope of the issue
+- Are concise enough to review quickly
+- Can be validated without needing tribal knowledge
+
+## What weak acceptance criteria look like
+
+Weak criteria fail because they do not define what a reviewer should observe to confirm completion.
+
+Examples of weak criteria:
+- "Works as expected."
+- "Bug is fixed."
+- "Implement the change."
+- "Update the UI."
+- "Handle errors."
+- "Make it better."
+- "Refactor complete."
+
+---
+
+# Formats
+
+Use one of the two formats below. Choose based on the nature of the issue.
+
+## Format A: Given / When / Then
+
+Use for user-facing behavior, workflows, interaction changes, and API behavior.
+
+```text
+Given [starting context]
+When [action occurs]
+Then [expected observable outcome]
+```
+
+## Format B: Checklist
+
+Use for technical tasks, migrations, infrastructure changes, and multi-step operations.
+
+```text
+- [ ] [Observable condition 1]
+- [ ] [Observable condition 2]
+- [ ] [Category-specific checklist items from matching CAT rule — see Category-Binding Gate above]
+- [ ] 📖 Documentation updated (README / docs folder) if behavior changed
+```
+
+---
+
+# Markers on Every Issue
+
+- **💣 at the top** of every issue/prompt (acknowledges rules were loaded — see [core.mdc](core.mdc))
+- **📖 next to the documentation-update AC item**
+- **💥 at the end** of every output (acknowledges rules were followed)
+- After completion, issues must be marked **Done** in Linear (not just PR merged — see [agents.mdc](agents.mdc) § Issue-Driven Work).
