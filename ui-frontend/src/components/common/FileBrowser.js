@@ -3,35 +3,51 @@ import { filesystemAPI } from '../../services/api';
 import { Folder, File, ArrowUp, Loader, FolderPlus, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const FileBrowser = ({ onSelect, mode = 'file', startPath = '' }) => {
-  const [currentPath, setCurrentPath] = useState(startPath);
+/**
+ * FileBrowser browses container-internal paths but displays host-friendly paths.
+ *
+ * Props:
+ *   onSelect(containerPath)  — called with the raw container path on selection
+ *   mode                     — 'file' | 'directory'
+ *   startPath                — initial container path to open (e.g. /media/input)
+ *   rootPath                 — container path that is the navigation floor (can't go above)
+ *   displayPath(containerPath) → string  — optional translator for the header label
+ */
+const FileBrowser = ({ onSelect, mode = 'file', startPath = '', rootPath = '', displayPath }) => {
+  const [currentPath, setCurrentPath] = useState(startPath || '/media/input');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
+  const root = rootPath || startPath || '/media/input';
+
   useEffect(() => {
     loadPath(currentPath);
-  }, [currentPath]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loadPath = async (path) => {
     setLoading(true);
     setError(null);
     try {
-      // Default to /media/input (container mount point for source media)
-      const targetPath = path || '/media/input';
-      console.log('📂 Browsing path:', targetPath);
-      const data = await filesystemAPI.browse(targetPath);
-      
+      const data = await filesystemAPI.browse(path);
       if (data && data.success) {
-        setItems(data.data.items);
-        setCurrentPath(data.data.current_path);
+        // Filter out the ".." entry if we're already at or above the root
+        const newPath = data.data.current_path;
+        const atRoot = newPath === root || !newPath.startsWith(root + '/') && newPath !== root;
+        const filteredItems = data.data.items.filter((item) => {
+          if (item.name !== '..') return true;
+          // Only show ".." if there is a valid parent inside our root
+          return newPath !== root && newPath.startsWith(root);
+        });
+        setItems(filteredItems);
+        setCurrentPath(newPath);
       } else {
         throw new Error(data?.error || 'Failed to load directory');
       }
     } catch (err) {
-      console.error('❌ Failed to load path:', err);
       setError(err.response?.data?.error || err.message || 'Failed to load directory. Access denied or invalid path.');
     } finally {
       setLoading(false);
@@ -40,14 +56,13 @@ const FileBrowser = ({ onSelect, mode = 'file', startPath = '' }) => {
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
-    
     try {
       const response = await filesystemAPI.mkdir(currentPath, newFolderName);
       if (response.success) {
         toast.success(`Folder "${newFolderName}" created`);
         setNewFolderName('');
         setIsCreatingFolder(false);
-        loadPath(currentPath); // Refresh
+        loadPath(currentPath);
       } else {
         toast.error(response.error || 'Failed to create folder');
       }
@@ -58,14 +73,14 @@ const FileBrowser = ({ onSelect, mode = 'file', startPath = '' }) => {
 
   const handleItemClick = (item) => {
     if (item.is_directory || item.name === '..') {
-      // Use item.path from backend if available, otherwise calculate it
       let targetPath = item.path;
-      
       if (item.name === '..' && !targetPath) {
         targetPath = currentPath.split('/').slice(0, -1).join('/') || '/';
       }
-      
-      console.log('📂 Navigating to:', targetPath);
+      // Clamp: never navigate above our root
+      if (!targetPath.startsWith(root)) {
+        targetPath = root;
+      }
       loadPath(targetPath);
     } else if (mode === 'file') {
       onSelect(item.path);
@@ -78,11 +93,13 @@ const FileBrowser = ({ onSelect, mode = 'file', startPath = '' }) => {
     }
   };
 
+  const headerLabel = displayPath ? displayPath(currentPath) : currentPath || 'Root';
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm h-full flex flex-col">
       <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-        <h3 className="text-sm font-medium text-gray-700 truncate mr-2" title={currentPath}>
-          {currentPath || 'Root'}
+        <h3 className="text-sm font-medium text-gray-700 truncate mr-2" title={headerLabel}>
+          {headerLabel}
         </h3>
         <div className="flex items-center space-x-2 shrink-0">
           <button

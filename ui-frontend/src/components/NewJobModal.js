@@ -162,6 +162,8 @@ const NewJobModal = ({ onClose }) => {
                 <FileBrowser
                   mode="file"
                   startPath="/media/input"
+                  rootPath="/media/input"
+                  displayPath={(p) => roots ? p.replace('/media/input', roots.input.host_path) : p}
                   onSelect={handleInputSelect}
                 />
               </div>
@@ -192,6 +194,8 @@ const NewJobModal = ({ onClose }) => {
                 <FileBrowser
                   mode="directory"
                   startPath="/media/output"
+                  rootPath="/media/output"
+                  displayPath={(p) => roots ? p.replace('/media/output', roots.output.host_path) : p}
                   onSelect={handleOutputSelect}
                 />
               </div>
