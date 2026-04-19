@@ -342,7 +342,7 @@ def run_handbrake_conversion(job: "ConversionJob") -> None:
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
 
-        # Build HandBrake command
+        # Build HandBrake command — no --json so text progress goes to stdout
         cmd = [
             "HandBrakeCLI",
             "-i",
@@ -351,35 +351,69 @@ def run_handbrake_conversion(job: "ConversionJob") -> None:
             job.output_path,
             "-q",
             str(job.quality),
-            "-r",
-            job.resolution,
             "-b",
             str(job.video_bitrate),
             "-B",
             str(job.audio_bitrate),
-            "--json",  # Enable JSON output for progress
         ]
+        # Resolution: "WxH" → --width W --height H (HandBrake -r is framerate, not resolution)
+        if job.resolution and "x" in job.resolution:
+            parts = job.resolution.split("x", 1)
+            try:
+                cmd += ["--width", str(int(parts[0])), "--height", str(int(parts[1]))]
+            except ValueError:
+                pass  # skip invalid resolution
 
         # Run conversion and store Popen reference for cancellation
+        # stdout is binary so we can split on both \n and \r (HandBrake uses \r for progress)
         process = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
         with job_lock:
             if job.id in active_jobs:
                 active_jobs[job.id]["process"] = process
 
-        # Read stderr line-by-line — HandBrakeCLI writes all progress to stderr
-        _progress_warned = False
-        for line in process.stderr:
-            line = line.rstrip()
-            logger.debug("handbrake_stderr", line=line)
-            m = _PROGRESS_RE.search(line)
-            if m:
-                job.progress = float(m.group(1))
-                save_job_to_db(job)
-            elif not _progress_warned and line:
-                logger.warning("handbrake_progress_no_match", line=line[:200])
-                _progress_warned = True
+        # Drain stderr in a background thread to prevent pipe deadlock
+        stderr_chunks: list = []
+
+        def _drain_stderr() -> None:
+            assert process.stderr is not None
+            stderr_chunks.append(process.stderr.read().decode("utf-8", errors="replace"))
+
+        stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
+        stderr_thread.start()
+
+        # Read stdout byte-by-byte accumulating tokens split on \r or \n.
+        # HandBrakeCLI writes "Encoding: task N of M, X.XX %" terminated by \r (no \n),
+        # so line-based iteration misses all intermediate progress updates.
+        assert process.stdout is not None
+        buf = bytearray()
+        while True:
+            ch = process.stdout.read(1)
+            if not ch:
+                break
+            if ch in (b'\r', b'\n'):
+                line = buf.decode("utf-8", errors="replace").strip()
+                buf.clear()
+                if not line:
+                    continue
+                logger.debug("handbrake_stdout", line=line[:200])
+                m = _PROGRESS_RE.search(line)
+                if m:
+                    job.progress = float(m.group(1))
+                    save_job_to_db(job)
+            else:
+                buf.extend(ch)
+        # flush any remaining content
+        if buf:
+            line = buf.decode("utf-8", errors="replace").strip()
+            if line:
+                m = _PROGRESS_RE.search(line)
+                if m:
+                    job.progress = float(m.group(1))
+                    save_job_to_db(job)
+
+        stderr_thread.join(timeout=10)
 
         # Check result — skip DB update if job was externally cancelled
         return_code = process.wait()
@@ -396,9 +430,9 @@ def run_handbrake_conversion(job: "ConversionJob") -> None:
             job.completed_at = datetime.utcnow()
             logger.info(f"Job {job.id} completed successfully")
         else:
-            stdout_tail = process.stdout.read()
+            stderr_tail = "".join(stderr_chunks)[-2000:]
             job.status = JobStatus.FAILED
-            job.error_message = f"HandBrake failed (exit {return_code}): {stdout_tail[:2000]}"
+            job.error_message = f"HandBrake failed (exit {return_code}): {stderr_tail}"
             logger.error(f"Job {job.id} failed: {job.error_message}")
 
         # Save to database and remove from active tracking
