@@ -62,9 +62,9 @@ const NewJobModal = ({ onClose }) => {
               <input
                 type="text"
                 value={inputPath}
-                readOnly
-                className="block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 px-3 py-2 border"
-                placeholder="Select a video file..."
+                onChange={(e) => setInputPath(e.target.value)}
+                className="block w-full border-gray-300 rounded-md shadow-sm bg-white px-3 py-2 border focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="Type a path or use Browse..."
               />
               <button
                 type="button"
@@ -94,9 +94,9 @@ const NewJobModal = ({ onClose }) => {
               <input
                 type="text"
                 value={outputPath}
-                readOnly
-                className="block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 px-3 py-2 border"
-                placeholder="Select destination folder..."
+                onChange={(e) => setOutputPath(e.target.value)}
+                className="block w-full border-gray-300 rounded-md shadow-sm bg-white px-3 py-2 border focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="Type a path or use Browse..."
               />
               <button
                 type="button"
@@ -110,6 +110,7 @@ const NewJobModal = ({ onClose }) => {
               <div className="mt-2 h-64 border rounded-md">
                 <FileBrowser
                   mode="directory"
+                  startPath="/media/output"
                   onSelect={(path) => {
                     // Extract filename from input path if available
                     let filename = "converted_video.mp4";

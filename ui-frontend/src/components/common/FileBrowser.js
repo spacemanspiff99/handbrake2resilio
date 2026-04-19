@@ -19,8 +19,8 @@ const FileBrowser = ({ onSelect, mode = 'file', startPath = '' }) => {
     setLoading(true);
     setError(null);
     try {
-      // Default to /mnt if path is empty
-      const targetPath = path || '/mnt';
+      // Default to /media/input (container mount point for source media)
+      const targetPath = path || '/media/input';
       console.log('📂 Browsing path:', targetPath);
       const data = await filesystemAPI.browse(targetPath);
       
