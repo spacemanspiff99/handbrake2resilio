@@ -5,6 +5,7 @@ Provides REST API interface for video conversion operations with SQLite storage
 """
 
 import os
+import re
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import logging
@@ -315,8 +316,16 @@ def get_all_jobs_from_db():
         return jobs
 
 
-def run_handbrake_conversion(job):
-    """Run HandBrake conversion for a job"""
+_PROGRESS_RE = re.compile(r'(\d+\.\d+) %')
+
+
+def run_handbrake_conversion(job: "ConversionJob") -> None:
+    """
+    Run HandBrakeCLI for the given job in the current thread.
+
+    Reads progress from stderr text lines and updates job.progress
+    incrementally. Caller is responsible for running this in a thread.
+    """
     try:
         logger.info(f"Starting conversion for job {job.id}")
 
@@ -359,24 +368,21 @@ def run_handbrake_conversion(job):
             if job.id in active_jobs:
                 active_jobs[job.id]["process"] = process
 
-        # Monitor progress
-        while True:
-            output = process.stdout.readline()
-            if output == "" and process.poll() is not None:
-                break
-            if output:
-                try:
-                    # Parse JSON progress updates
-                    progress_data = json.loads(output.strip())
-                    if "Progress" in progress_data:
-                        job.progress = progress_data["Progress"]["Progress"] * 100
-                        logger.info(f"Job {job.id} progress: {job.progress:.1f}%")
-                        save_job_to_db(job)
-                except json.JSONDecodeError:
-                    pass  # Skip non-JSON output
+        # Read stderr line-by-line — HandBrakeCLI writes all progress to stderr
+        _progress_warned = False
+        for line in process.stderr:
+            line = line.rstrip()
+            logger.debug("handbrake_stderr", line=line)
+            m = _PROGRESS_RE.search(line)
+            if m:
+                job.progress = float(m.group(1))
+                save_job_to_db(job)
+            elif not _progress_warned and line:
+                logger.warning("handbrake_progress_no_match", line=line[:200])
+                _progress_warned = True
 
         # Check result — skip DB update if job was externally cancelled
-        return_code = process.poll()
+        return_code = process.wait()
         with job_lock:
             was_cancelled = job.status == JobStatus.CANCELLED
 
@@ -390,8 +396,9 @@ def run_handbrake_conversion(job):
             job.completed_at = datetime.utcnow()
             logger.info(f"Job {job.id} completed successfully")
         else:
+            stdout_tail = process.stdout.read()
             job.status = JobStatus.FAILED
-            job.error_message = f"HandBrake failed with return code {return_code}"
+            job.error_message = f"HandBrake failed (exit {return_code}): {stdout_tail[:2000]}"
             logger.error(f"Job {job.id} failed: {job.error_message}")
 
         # Save to database and remove from active tracking
