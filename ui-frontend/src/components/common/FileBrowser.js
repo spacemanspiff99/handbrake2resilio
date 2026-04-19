@@ -36,7 +36,6 @@ const FileBrowser = ({ onSelect, mode = 'file', startPath = '', rootPath = '', d
       if (data && data.success) {
         // Filter out the ".." entry if we're already at or above the root
         const newPath = data.data.current_path;
-        const atRoot = newPath === root || !newPath.startsWith(root + '/') && newPath !== root;
         const filteredItems = data.data.items.filter((item) => {
           if (item.name !== '..') return true;
           // Only show ".." if there is a valid parent inside our root
