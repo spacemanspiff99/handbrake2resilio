@@ -5,13 +5,43 @@ import FileBrowser from './common/FileBrowser';
 import { X, HardDrive } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+/**
+ * Paths the user sees and types are always host paths (e.g. /mnt/tv/show.mkv).
+ * On submit we translate host → container path before sending to the API.
+ *
+ * roots.input  = { host_path: '/mnt/tv',                    path: '/media/input'  }
+ * roots.output = { host_path: '/mnt/archive/Resilio_sync',  path: '/media/output' }
+ */
+const toContainerPath = (hostPath, roots) => {
+  if (!roots || !hostPath) return hostPath;
+  if (hostPath.startsWith(roots.input.host_path)) {
+    return hostPath.replace(roots.input.host_path, roots.input.path);
+  }
+  if (hostPath.startsWith(roots.output.host_path)) {
+    return hostPath.replace(roots.output.host_path, roots.output.path);
+  }
+  // Already a container path (e.g. user typed /media/input/…)
+  return hostPath;
+};
+
+const toHostPath = (containerPath, roots) => {
+  if (!roots || !containerPath) return containerPath;
+  if (containerPath.startsWith(roots.input.path)) {
+    return containerPath.replace(roots.input.path, roots.input.host_path);
+  }
+  if (containerPath.startsWith(roots.output.path)) {
+    return containerPath.replace(roots.output.path, roots.output.host_path);
+  }
+  return containerPath;
+};
+
 const NewJobModal = ({ onClose }) => {
-  const [inputPath, setInputPath] = useState('');
-  const [outputPath, setOutputPath] = useState('');
+  // State stores host paths — what the user sees
+  const [inputHostPath, setInputHostPath] = useState('');
+  const [outputHostPath, setOutputHostPath] = useState('');
   const [showInputBrowser, setShowInputBrowser] = useState(false);
   const [showOutputBrowser, setShowOutputBrowser] = useState(false);
   const [roots, setRoots] = useState(null);
-
   const [quality, setQuality] = useState(23);
   const [profile, setProfile] = useState('standard');
 
@@ -37,32 +67,41 @@ const NewJobModal = ({ onClose }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!inputPath || !outputPath) {
+    if (!inputHostPath || !outputHostPath) {
       toast.error('Please select input and output paths');
       return;
     }
-
     addJobMutation.mutate({
-      input_path: inputPath,
-      output_path: outputPath,
+      input_path: toContainerPath(inputHostPath, roots),
+      output_path: toContainerPath(outputHostPath, roots),
       quality: Number(quality),
       resolution: profile === 'high' ? '1920x1080' : '1280x720',
     });
   };
 
-  // Build a human-readable path label using host_path when available
-  const displayPath = (containerPath, rootKey) => {
-    if (!roots || !containerPath) return containerPath;
-    const root = roots[rootKey];
-    if (!root) return containerPath;
-    const relative = containerPath.replace(root.path, '').replace(/^\//, '');
-    return relative
-      ? `${root.host_path}/${relative}`
-      : root.host_path;
+  // When the file browser selects a container path, convert it to a host path for display
+  const handleInputSelect = (containerPath) => {
+    setInputHostPath(toHostPath(containerPath, roots));
+    setShowInputBrowser(false);
   };
 
-  const inputDisplayPath = displayPath(inputPath, 'input');
-  const outputDisplayPath = displayPath(outputPath, 'output');
+  const handleOutputSelect = (containerPath) => {
+    let base = 'converted_video.mp4';
+    if (inputHostPath) {
+      const stem = inputHostPath.split('/').pop().split('.').slice(0, -1).join('.') || inputHostPath.split('/').pop();
+      base = stem + '.mp4';
+    }
+    const dir = toHostPath(containerPath, roots);
+    setOutputHostPath(dir.endsWith('/') ? dir + base : dir + '/' + base);
+    setShowOutputBrowser(false);
+  };
+
+  const inputPlaceholder = roots
+    ? `e.g. ${roots.input.host_path}/ShowName/episode.mkv`
+    : 'Type a path or use Browse…';
+  const outputPlaceholder = roots
+    ? `e.g. ${roots.output.host_path}/output.mp4`
+    : 'Type a path or use Browse…';
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -76,10 +115,10 @@ const NewJobModal = ({ onClose }) => {
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
 
-          {/* Quick Access shortcuts */}
+          {/* Quick Access */}
           {roots && (
-            <div className="flex gap-2 flex-wrap">
-              <span className="text-xs text-gray-500 flex items-center gap-1 mr-1">
+            <div className="flex gap-2 flex-wrap items-center">
+              <span className="text-xs text-gray-500 flex items-center gap-1">
                 <HardDrive className="h-3 w-3" /> Quick access:
               </span>
               <button
@@ -105,10 +144,10 @@ const NewJobModal = ({ onClose }) => {
             <div className="flex space-x-2">
               <input
                 type="text"
-                value={inputDisplayPath}
-                onChange={(e) => setInputPath(e.target.value)}
+                value={inputHostPath}
+                onChange={(e) => setInputHostPath(e.target.value)}
                 className="block w-full border-gray-300 rounded-md shadow-sm bg-white px-3 py-2 border focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder={roots ? `e.g. ${roots.input.host_path}/ShowName/episode.mkv` : 'Type a path or use Browse…'}
+                placeholder={inputPlaceholder}
               />
               <button
                 type="button"
@@ -123,10 +162,7 @@ const NewJobModal = ({ onClose }) => {
                 <FileBrowser
                   mode="file"
                   startPath="/media/input"
-                  onSelect={(containerPath) => {
-                    setInputPath(containerPath);
-                    setShowInputBrowser(false);
-                  }}
+                  onSelect={handleInputSelect}
                 />
               </div>
             )}
@@ -138,10 +174,10 @@ const NewJobModal = ({ onClose }) => {
             <div className="flex space-x-2">
               <input
                 type="text"
-                value={outputDisplayPath}
-                onChange={(e) => setOutputPath(e.target.value)}
+                value={outputHostPath}
+                onChange={(e) => setOutputHostPath(e.target.value)}
                 className="block w-full border-gray-300 rounded-md shadow-sm bg-white px-3 py-2 border focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder={roots ? `e.g. ${roots.output.host_path}` : 'Type a path or use Browse…'}
+                placeholder={outputPlaceholder}
               />
               <button
                 type="button"
@@ -156,16 +192,7 @@ const NewJobModal = ({ onClose }) => {
                 <FileBrowser
                   mode="directory"
                   startPath="/media/output"
-                  onSelect={(containerPath) => {
-                    let filename = 'converted_video.mp4';
-                    if (inputPath) {
-                      const base = inputPath.split('/').pop().split('.').slice(0, -1).join('.') || inputPath.split('/').pop();
-                      filename = base + '.mp4';
-                    }
-                    const finalPath = containerPath.endsWith('/') ? containerPath + filename : containerPath + '/' + filename;
-                    setOutputPath(finalPath);
-                    setShowOutputBrowser(false);
-                  }}
+                  onSelect={handleOutputSelect}
                 />
               </div>
             )}

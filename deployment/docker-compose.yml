@@ -50,8 +50,8 @@ services:
       - OUTPUT_ROOT=/media/output
       - MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-2}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MEDIA_INPUT_PATH=/media/input
-      - MEDIA_OUTPUT_PATH=/media/output
+      - MEDIA_INPUT_PATH=${MEDIA_INPUT_PATH:-/media/input}
+      - MEDIA_OUTPUT_PATH=${MEDIA_OUTPUT_PATH:-/media/output}
     volumes:
       - app-data:/data:rw
       - ${MEDIA_INPUT_PATH:-/tmp/media_input}:/media/input:ro
