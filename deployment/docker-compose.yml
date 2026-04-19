@@ -12,6 +12,8 @@ services:
       - HANDBRAKE_SERVICE_URL=http://handbrake-service:8081
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - MEDIA_INPUT_PATH=${MEDIA_INPUT_PATH:-/media/input}
+      - MEDIA_OUTPUT_PATH=${MEDIA_OUTPUT_PATH:-/media/output}
     volumes:
       - app-data:/data:rw
       - ${MEDIA_INPUT_PATH:-/tmp/media_input}:/media/input:ro
