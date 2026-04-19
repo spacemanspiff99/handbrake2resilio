@@ -9,7 +9,7 @@ COMPOSE_FILE="deployment/docker-compose.yml"
 ENV_FILE=".env"
 COMPOSE_CMD="docker compose -f $COMPOSE_FILE --env-file $ENV_FILE"
 CONTAINERS=("h2r-api-gateway" "h2r-handbrake" "h2r-frontend")
-HEALTH_TIMEOUT=120  # seconds to wait for all containers healthy
+HEALTH_TIMEOUT=240  # seconds to wait for all containers healthy
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
