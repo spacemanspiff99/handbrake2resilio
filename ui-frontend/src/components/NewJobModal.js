@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from 'react-query';
-import { queueAPI } from '../services/api';
+import { queueAPI, filesystemAPI } from '../services/api';
 import FileBrowser from './common/FileBrowser';
-import { X, Folder, FileVideo } from 'lucide-react';
+import { X, HardDrive } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const NewJobModal = ({ onClose }) => {
@@ -10,12 +10,18 @@ const NewJobModal = ({ onClose }) => {
   const [outputPath, setOutputPath] = useState('');
   const [showInputBrowser, setShowInputBrowser] = useState(false);
   const [showOutputBrowser, setShowOutputBrowser] = useState(false);
-  
-  // Default settings
+  const [roots, setRoots] = useState(null);
+
   const [quality, setQuality] = useState(23);
   const [profile, setProfile] = useState('standard');
 
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    filesystemAPI.roots()
+      .then((data) => { if (data?.success) setRoots(data.data); })
+      .catch(() => {});
+  }, []);
 
   const addJobMutation = useMutation(queueAPI.addToQueue, {
     onSuccess: () => {
@@ -38,11 +44,25 @@ const NewJobModal = ({ onClose }) => {
 
     addJobMutation.mutate({
       input_path: inputPath,
-      output_path: outputPath, // HandBrake expects full output path usually, or dir? Service logic implies path.
+      output_path: outputPath,
       quality: Number(quality),
-      resolution: profile === 'high' ? '1920x1080' : '1280x720', // Simplified logic
+      resolution: profile === 'high' ? '1920x1080' : '1280x720',
     });
   };
+
+  // Build a human-readable path label using host_path when available
+  const displayPath = (containerPath, rootKey) => {
+    if (!roots || !containerPath) return containerPath;
+    const root = roots[rootKey];
+    if (!root) return containerPath;
+    const relative = containerPath.replace(root.path, '').replace(/^\//, '');
+    return relative
+      ? `${root.host_path}/${relative}`
+      : root.host_path;
+  };
+
+  const inputDisplayPath = displayPath(inputPath, 'input');
+  const outputDisplayPath = displayPath(outputPath, 'output');
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -55,21 +75,45 @@ const NewJobModal = ({ onClose }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Input Selection */}
+
+          {/* Quick Access shortcuts */}
+          {roots && (
+            <div className="flex gap-2 flex-wrap">
+              <span className="text-xs text-gray-500 flex items-center gap-1 mr-1">
+                <HardDrive className="h-3 w-3" /> Quick access:
+              </span>
+              <button
+                type="button"
+                onClick={() => { setShowInputBrowser(true); setShowOutputBrowser(false); }}
+                className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-1 rounded hover:bg-blue-100"
+              >
+                {roots.input.host_path}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowOutputBrowser(true); setShowInputBrowser(false); }}
+                className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded hover:bg-green-100"
+              >
+                {roots.output.host_path}
+              </button>
+            </div>
+          )}
+
+          {/* Input File */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Input File</label>
             <div className="flex space-x-2">
               <input
                 type="text"
-                value={inputPath}
+                value={inputDisplayPath}
                 onChange={(e) => setInputPath(e.target.value)}
                 className="block w-full border-gray-300 rounded-md shadow-sm bg-white px-3 py-2 border focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="Type a path or use Browse..."
+                placeholder={roots ? `e.g. ${roots.input.host_path}/ShowName/episode.mkv` : 'Type a path or use Browse…'}
               />
               <button
                 type="button"
                 onClick={() => { setShowInputBrowser(!showInputBrowser); setShowOutputBrowser(false); }}
-                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 border border-gray-300"
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 border border-gray-300 whitespace-nowrap"
               >
                 Browse
               </button>
@@ -78,8 +122,9 @@ const NewJobModal = ({ onClose }) => {
               <div className="mt-2 h-64 border rounded-md">
                 <FileBrowser
                   mode="file"
-                  onSelect={(path) => {
-                    setInputPath(path);
+                  startPath="/media/input"
+                  onSelect={(containerPath) => {
+                    setInputPath(containerPath);
                     setShowInputBrowser(false);
                   }}
                 />
@@ -87,21 +132,21 @@ const NewJobModal = ({ onClose }) => {
             )}
           </div>
 
-          {/* Output Selection */}
+          {/* Output Directory */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Output Directory</label>
             <div className="flex space-x-2">
               <input
                 type="text"
-                value={outputPath}
+                value={outputDisplayPath}
                 onChange={(e) => setOutputPath(e.target.value)}
                 className="block w-full border-gray-300 rounded-md shadow-sm bg-white px-3 py-2 border focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="Type a path or use Browse..."
+                placeholder={roots ? `e.g. ${roots.output.host_path}` : 'Type a path or use Browse…'}
               />
               <button
                 type="button"
                 onClick={() => { setShowOutputBrowser(!showOutputBrowser); setShowInputBrowser(false); }}
-                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 border border-gray-300"
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-200 border border-gray-300 whitespace-nowrap"
               >
                 Browse
               </button>
@@ -111,16 +156,13 @@ const NewJobModal = ({ onClose }) => {
                 <FileBrowser
                   mode="directory"
                   startPath="/media/output"
-                  onSelect={(path) => {
-                    // Extract filename from input path if available
-                    let filename = "converted_video.mp4";
+                  onSelect={(containerPath) => {
+                    let filename = 'converted_video.mp4';
                     if (inputPath) {
-                      const baseName = inputPath.split('/').pop().split('.').slice(0, -1).join('.') || inputPath.split('/').pop();
-                      filename = baseName + ".mp4";
+                      const base = inputPath.split('/').pop().split('.').slice(0, -1).join('.') || inputPath.split('/').pop();
+                      filename = base + '.mp4';
                     }
-                    
-                    // If path is a directory, append the filename
-                    const finalPath = path.endsWith('/') ? path + filename : path + "/" + filename;
+                    const finalPath = containerPath.endsWith('/') ? containerPath + filename : containerPath + '/' + filename;
                     setOutputPath(finalPath);
                     setShowOutputBrowser(false);
                   }}

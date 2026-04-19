@@ -109,6 +109,7 @@ export const systemAPI = {
 };
 
 export const filesystemAPI = {
+  roots: () => api.get('/api/filesystem/roots'),
   browse: (path) => api.get('/api/filesystem/browse', { params: { path } }),
   scan: (path) => api.post('/api/filesystem/scan', { path }),
   mkdir: (path, name) => api.post('/api/filesystem/mkdir', { path, name }),

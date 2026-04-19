@@ -922,6 +922,27 @@ def get_queue_jobs():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/filesystem/roots", methods=["GET"])
+@require_auth
+def filesystem_roots():
+    """Return named media root paths so the UI can show friendly shortcuts."""
+    return jsonify({
+        "success": True,
+        "data": {
+            "input": {
+                "label": "Input Media",
+                "path": "/media/input",
+                "host_path": os.environ.get("MEDIA_INPUT_PATH", "/media/input"),
+            },
+            "output": {
+                "label": "Output",
+                "path": "/media/output",
+                "host_path": os.environ.get("MEDIA_OUTPUT_PATH", "/media/output"),
+            }
+        }
+    })
+
+
 @app.route("/api/filesystem/browse", methods=["GET"])
 @require_auth
 def browse_filesystem():
