@@ -5,14 +5,14 @@ These instructions apply to the whole repository. They are for OpenAI Codex only
 ## Project Shape
 
 - This project automates HandBrake-to-Resilio workflows. Keep changes scoped to that domain.
-- Do not import weather-app, issue-tracker, or other project-specific tracker paths, host tables, branch flows, category taxonomies, or deployment assumptions.
+- Do not import guidance from unrelated projects: no foreign path layouts, tracker conventions, host tables, branch flows, category taxonomies, or deployment assumptions that belong to other repos.
 - Use the repository's normal branch and PR flow. Confirm the current branch before staging or committing.
 
 ## Prompt And Issue Workflow
 
-- Execution prompts live in `docs/prompts/`.
-- New phase prompts follow `PHASE_[N]_[DESCRIPTION].md` unless an existing local convention is more specific.
-- Completed prompts are renamed with a `done__` prefix and moved to `docs/prompts/completed prompts/` after all tasks are implemented and verified.
+- Execution prompts live in `documentation/prompts/`.
+- New sprint prompts follow `SPRINT_[NN][letter]_DESCRIPTION.md` unless an existing local convention is more specific.
+- Completed prompts are renamed with a `done__` prefix and moved to `documentation/prompts/completed prompts/` after all tasks are implemented and verified.
 - Every prompt needs context, target files, acceptance criteria, verification steps, and a STOP section naming the next prompt or `none`.
 - Keep tasks small enough to verify independently. Do not mix prompt/rules updates with unrelated feature work.
 

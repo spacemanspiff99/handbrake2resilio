@@ -5,23 +5,21 @@ alwaysApply: true
 ---
 
 *Manual rules
--use three personas where appropreate - front end engineer, back end engineer, full stack engineer, engineering manager, project manager and qa engineer.  When creating prompts, select which ones are releveant, then in the prompt, make sure to iterate between the personas in sequence, NOT parallel as to get best expertise.  
--when editing/modifying a frontend, always use a browser simulation tool such as playright (do research for the best one), never assume the frontend will work
--use cheaper subagents (compose 2, haiku 3.5, etc... or the best model that will get it done)
--always have acceptance criteria on prompts/issues. 
--always recommend a llm model on prompts/subissues 
+-use three personas where appropriate - front end engineer, back end engineer, full stack engineer, engineering manager, project manager and qa engineer. When creating prompts, select which ones are relevant, then in the prompt, make sure to iterate between the personas in sequence, NOT parallel as to get best expertise.
+-when editing/modifying a frontend, always use a browser simulation tool such as Playwright, never assume the frontend will work
+-use cheaper subagents (Sonnet 5, Haiku 4.5, or the best model that will get it done) for narrow pass/fail work; keep the expensive model for judgment and orchestration
+-always have acceptance criteria on prompts/issues.
+-always recommend a llm model on prompts/subissues
 -always check the model used matches the recommendation when starting an issue
 -move prompts to completed prompts folder when complete
--prompts should have 4 digit number at the beginning - i.e. 0001 denoting sequence, although should rely more on lienar issues.
--only touch lienar issues in handbrake2resilio project, NO OTHER PROJECTS
--all linear issues created should be in handbrake2resilio project
+-issue tracking, if used, stays within the handbrake2resilio project only — NO OTHER PROJECTS
 
 # 🏗️ PROJECT STANDARDS & ORGANIZATION
 
 ## File and Folder Organization
-1. **No files in root directory** - everything must be in respective folders
+1. **No files in root directory** - everything must be in respective folders (exceptions: standard root files — README.md, CLAUDE.md, AGENTS.md, .env.example, .gitignore)
 2. **No duplicate folders** - check existing structure before creating new folders
-3. **Follow pattern:** `rep-engine-service/[service-name]/[function-name]/`. also but things like tests in a subfolder to the function (i.e. [function-name]/unit-tests). Do not create more than 5 unrelated files - i.e. if there are more than 5 deployment scripts, create a folder called 'deployment' and move them all there.
+3. **Follow the repo's actual layout:** `api-gateway/`, `handbrake-service/`, `ui-frontend/`, `shared/`, `deployment/`, `documentation/`, `testing/`, `data/`, `logs/`. Put tests in a subfolder next to what they test (e.g. `ui-frontend/tests/`). Do not create more than 5 unrelated files in one place — if there are more than 5 deployment scripts, they belong in `deployment/`.
 4. **Before creating folders:**
    - Search existing workspace for similar folders
    - Use existing locations - DO NOT create duplicates
@@ -30,26 +28,16 @@ alwaysApply: true
 5. **File naming:** Create versions of files (v1, v2, etc... instead of slightly changing files like deploy, deploy_new, deploy_simple, make it deploy001, deploy002, deploy003)
 
 ## Code Quality & Principles
-- **DRY and SRP**: Generate code that is DRY and SRP-compliant—no duplicated blocks (>3 lines), each function/class has one clear purpose, shared logic lives in reusable helpers, and all names/styles follow the project’s ESLint/Prettier conventions.
-- **Official Documentation**: ALWAYS consult official documentation for API formatting first before implementing any feature or making assumptions (Google Cloud, Mailgun, PostgreSQL, etc.).
+- **DRY and SRP**: Generate code that is DRY and SRP-compliant—no duplicated blocks (>3 lines), each function/class has one clear purpose, shared logic lives in reusable helpers, and all names/styles follow the project's lint/format conventions.
+- **Official Documentation**: ALWAYS consult official documentation for API formatting first before implementing any feature or making assumptions (HandBrakeCLI, Flask, Docker, React, etc.).
 - **Python Standards**: ALWAYS use type hints, implement proper error handling, write unit tests, use meaningful names, and add docstrings.
 
 ## Database Migration Rules
-- **ONLY** store .sql files in the central `migrations/` folder
+(No `migrations/` folder exists yet — the SQLite schema is created in code. If migrations are ever introduced:)
+- **ONLY** store .sql files in a single central `migrations/` folder at the repo root
 - **NEVER** create other database migration folders
 - **ALWAYS** use versioned migration files
 - **ALWAYS** test migrations on development data first
-
-## Terraform Safety Rules
-- **NEVER** run `terraform apply -auto-approve` without first running `terraform plan`
-- **ALWAYS** wait for user approval before running `terraform apply`
-- **NEVER** force unlock Terraform state without investigation
-- **ALWAYS** provide a summary of planned changes before applying
-- **Respect state locks** - wait for operations to complete
-
-## Google Cloud Authentication
-- **ALWAYS** use `gcloud auth login --no-launch-browser` when authentication is required
-- **NEVER** wait for user instruction for standard workspace requirements
 
 # 🎯 CORE DEVELOPMENT PRINCIPLES
 
@@ -69,7 +57,7 @@ alwaysApply: true
 
 ## Development Workflow
 - **Environment Variables**: ALWAYS use environment variables; NEVER hardcode secrets, host names, or parameters.
-- **Docker Best Practices**: DO NOT run docker as sudo; use multi-stage builds.
+- **Docker Best Practices**: DO NOT run docker as sudo; use multi-stage builds. If the shell predates docker-group membership, use `sg docker -c '...'`.
 - **Logs First (Debugging)**: ALWAYS analyze logs (server and client) BEFORE analyzing code for logic issues. If necessary logs do not exist, update the code to implement logging that would catch the issue being debugged. NEVER attempt to fix bugs directly from code evaluation alone without log-based verification of the root cause.
 - **No Incremental Updates**: NEVER attempt to update running containers; ALWAYS do full clean rebuilds.
 
@@ -87,9 +75,6 @@ alwaysApply: true
 
 ## Frontend Visual Acceptance Criteria
 - Any prompt/issue touching `ui-frontend/` MUST include: "UI is visually styled (not raw text)." Verify via browser or Playwright screenshot. "No JS errors" alone is NOT sufficient — an unstyled app has zero JS errors.
-
-## Magic Patterns UI Integration
-- **Immutable UI Code**: When importing a UI from Magic Patterns, no UI code should be updated unless it has a bug and with explicit permission. Otherwise, use code as is and configure middleware (hooks, utils, or wrappers) to suit the project requirements.
 
 # 🔒 SECURITY & DATA PROTECTION
 
@@ -125,23 +110,22 @@ This ensures no stale containers, no cached build issues, and reproducible deplo
 # 📝 PROMPT MANAGEMENT & EXECUTION
 
 ## Lifecycle & Naming
-1. **Sequence**: All execution 
-prompts MUST follow a sequential naming convention: `PHASE_[N]_[DESCRIPTION].md`.
-2. **Completion**: Once ALL tasks in a prompt are implemented AND verified, the file MUST be renamed with a `done__` prefix (e.g., `done__PHASE_01_INITIAL_SETUP.md`).
-3. **Location**: All execution prompts must reside in `scripts/weather-app/docs/prompts/`.
-4. **Handoff**: Every prompt MUST end with a "STOP" section that explicitly names the next file in the sequence.
-5. **Git Commit & Push**: IMMEDIATELY after completing all tasks in a prompt (and renaming the file to `done__`), you MUST commit all changes and push to the remote repository on the current branch.
+1. **Sequence**: All execution prompts MUST follow the sequential naming convention `SPRINT_[NN][letter]_DESCRIPTION.md` (e.g. `SPRINT_06B_RULES_CONSOLIDATION_VIBECODING.md`). Legacy `PHASE_[NN]_` files remain as-is in the completed folder.
+2. **Completion**: Once ALL tasks in a prompt are implemented AND verified, the file MUST be renamed with a `done__` prefix (e.g., `done__SPRINT_06B_RULES_CONSOLIDATION_VIBECODING.md`).
+3. **Location**: All execution prompts must reside in `documentation/prompts/`; completed prompts move to `documentation/prompts/completed prompts/`.
+4. **Handoff**: Every prompt MUST end with a "STOP" section that explicitly names the next file in the sequence (or `none`).
+5. **Git Commit & Push**: IMMEDIATELY after completing all tasks in a prompt (and renaming the file to `done__`), you MUST commit all changes and push to the remote repository on the current branch. On machines without GitHub credentials, commit locally and report the exact blocked push command in the final report.
 
 ## Prompt Content Requirements
 1. **Context**: Every prompt MUST reference the `rules.mdc` file.
 2. **Actionable**: Tasks must be concrete, file-specific, and include code snippets where appropriate.
 3. **Verification**: Every prompt MUST include a "Verification" section with specific commands or checks.
-4. **Git Operations**: Every prompt completion implies a mandatory `git add .`, `git commit -m "[Descriptive message]"`, and `git push origin [current-branch]`.
+4. **Git Operations**: Every prompt completion implies a mandatory `git add .`, `git commit -m "[Descriptive message]"`, and `git push origin [current-branch]` (push per rule 5 above when credentials are absent).
 
 Always create prompts before executing anything - don't just execute in session for cost and memory management
 *always have acceptance criteria in prompts that demonstrate the update is working as expected
 *always do unit and end to end testing
-Always use .cursor/rules/agent.mdc to recommend the correct agent for a prompt - then before runnign the prompt, always hceck to make sure the right model is running
+Always use .cursor/rules/agents.mdc to recommend the correct agent/model for a prompt - then before running the prompt, always check to make sure the right model is running
 
 
 print this at the beginning of every issue/prompt so i know you listened 💣
