@@ -37,7 +37,7 @@ ssh akun@192.168.10.18 "cd /home/akun && rm -rf handbrake* *.tar.gz *.zip docker
 **STEP 5: KILL ANY LINGERING PROCESSES ON TARGET PORTS**
 
 ```bash
-ssh akun@192.168.10.18 "fuser -k 8080/tcp 3000/tcp 8081/tcp 2>/dev/null || true"
+ssh akun@192.168.10.18 "fuser -k 8080/tcp 7474/tcp 8081/tcp 2>/dev/null || true"
 ssh akun@192.168.10.18 "pkill -f 'python.*8080' 2>/dev/null || true"
 ssh akun@192.168.10.18 "pkill -f 'handbrake' 2>/dev/null || true"
 ```
@@ -52,9 +52,9 @@ ssh akun@192.168.10.18 "pkill -f 'handbrake' 2>/dev/null || true"
 
 Always use consistent, predictable container names:
 
-- `handbrake2resilio-api-gateway` for API Gateway
-- `handbrake2resilio-frontend` for React Frontend
-- `handbrake2resilio-handbrake` for HandBrake Service
+- `h2r-api-gateway` for API Gateway
+- `h2r-frontend` for React Frontend
+- `h2r-handbrake` for HandBrake Service
 
 ### Rule 3: DEPLOYMENT VERIFICATION
 
@@ -63,7 +63,7 @@ After every deployment, ALWAYS verify:
 ```bash
 ssh akun@192.168.10.18 "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
 ssh akun@192.168.10.18 "curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/health"
-ssh akun@192.168.10.18 "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000"
+ssh akun@192.168.10.18 "curl -s -o /dev/null -w '%{http_code}' http://localhost:7474"
 ```
 
 ### Rule 4: NO INCREMENTAL UPDATES
@@ -108,7 +108,7 @@ echo "📁 STEP 5: Cleaning home directory..."
 ssh akun@192.168.10.18 "cd /home/akun && rm -rf handbrake* *.tar.gz *.zip docker-compose* Dockerfile* requirements* deploy* test* verify* standalone*"
 
 echo "⚔️ STEP 6: Killing lingering processes..."
-ssh akun@192.168.10.18 "fuser -k 8080/tcp 3000/tcp 8081/tcp 2>/dev/null || true"
+ssh akun@192.168.10.18 "fuser -k 8080/tcp 7474/tcp 8081/tcp 2>/dev/null || true"
 
 echo "📦 STEP 7: Uploading new code..."
 # Upload your code here
