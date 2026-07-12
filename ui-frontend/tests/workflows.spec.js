@@ -18,6 +18,21 @@ test.describe('Workflows', () => {
   test.beforeEach(async ({ page }) => {
     await setupAuthMocks(page);
     await setupDashboardMocks(page);
+    // NewJobModal fetches roots on mount; unmocked it hits the live API with the
+    // fake test token and the 401 interceptor bounces the page back to /login.
+    await page.route('**/api/filesystem/roots', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            input: { host_path: '/mnt/tv', path: '/media/input', label: 'Input Media' },
+            output: { host_path: '/mnt/archive', path: '/media/output', label: 'Output' },
+          },
+        }),
+      });
+    });
     await page.route('**/api/filesystem/browse**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -72,9 +87,9 @@ test.describe('Workflows', () => {
     // Select the video file
     await page.locator('text=video.mp4').first().click();
 
-    // Input path should be populated
+    // Input path should be populated (placeholder is derived from roots.input.host_path)
     await expect(
-      page.locator('input[placeholder="Select a video file..."]')
+      page.locator('input[placeholder*="episode.mkv"]')
     ).toHaveValue('/mnt/video.mp4', { timeout: 5000 });
   });
 });

@@ -54,7 +54,8 @@ test.describe('Smoke Test - Production Verification', () => {
     await page.click('button:has-text("New Job")');
     await expect(page.getByText('Add New Conversion Job')).toBeVisible({ timeout: 5000 });
     await page.click('button:has-text("Browse") >> nth=0');
-    await expect(page.locator('text=media').or(page.locator('text=mnt')).or(page.locator('text=tmp'))).toBeVisible({ timeout: 10000 });
+    // .first(): the modal's Quick access buttons also contain these path substrings
+    await expect(page.locator('text=media').or(page.locator('text=mnt')).or(page.locator('text=tmp')).first()).toBeVisible({ timeout: 10000 });
     await page.screenshot({ path: 'test-results/file-browser.png', fullPage: true });
   });
 });
